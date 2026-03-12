@@ -37,6 +37,20 @@ const games = [
     category: "math" as const,
   },
   {
+    title: "Speed Compare",
+    description: "Which number is bigger? Think fast!",
+    href: "/games/speed-compare",
+    emoji: "⚡",
+    category: "math" as const,
+  },
+  {
+    title: "Visual Memory",
+    description: "Remember the pattern and recreate it from memory.",
+    href: "/games/visual-memory",
+    emoji: "🧩",
+    category: "memory" as const,
+  },
+  {
     title: "Word Scramble",
     description: "Unscramble the letters to reveal the hidden word.",
     href: "/games/word-scramble",
