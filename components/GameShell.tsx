@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getHighScore, setHighScore } from "@/lib/scores";
+import type { Difficulty } from "@/lib/difficulty";
 
 interface GameShellProps {
   gameId: string;
@@ -13,6 +14,7 @@ interface GameShellProps {
   showTimer?: boolean;
   timeLeft?: number;
   instructions?: string;
+  difficulty?: Difficulty;
 }
 
 export default function GameShell({
@@ -24,20 +26,22 @@ export default function GameShell({
   showTimer,
   timeLeft,
   instructions,
+  difficulty,
 }: GameShellProps) {
+  const scoreKey = difficulty ? `${gameId}-${difficulty}` : gameId;
   const [highScore, setHigh] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
-    setHigh(getHighScore(gameId));
-  }, [gameId]);
+    setHigh(getHighScore(scoreKey));
+  }, [scoreKey]);
 
   useEffect(() => {
     if (score > 0 && score > highScore) {
-      setHighScore(gameId, score);
+      setHighScore(scoreKey, score);
       setHigh(score);
     }
-  }, [gameId, score, highScore]);
+  }, [scoreKey, score, highScore]);
 
   return (
     <div>

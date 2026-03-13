@@ -11,6 +11,15 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "YaGo BrainGames",
   description: "Train your brain with fun games",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "YaGo BrainGames",
+  },
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export default function RootLayout({
