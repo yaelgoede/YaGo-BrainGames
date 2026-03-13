@@ -2,15 +2,23 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import GameShell from "@/components/GameShell";
+import DifficultySelector from "@/components/DifficultySelector";
 import { pickWords, buildTestRound, WORD_POOL } from "@/lib/games/word-memory";
+import { type Difficulty, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
 
-type Phase = "memorize" | "test" | "results";
+const GAME_ID = "word-memory";
 
-const MEMORIZE_WORDS = 8;
-const TEST_COUNT = 10;
+type Phase = "idle" | "memorize" | "test" | "results";
+
+const SETTINGS: Record<Difficulty, { memCount: number; testCount: number; displayMs: number }> = {
+  easy: { memCount: 5, testCount: 8, displayMs: 2000 },
+  medium: { memCount: 8, testCount: 10, displayMs: 1500 },
+  hard: { memCount: 12, testCount: 15, displayMs: 1000 },
+};
 
 export default function WordMemoryPage() {
-  const [phase, setPhase] = useState<Phase>("memorize");
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => getSavedDifficulty(GAME_ID));
+  const [phase, setPhase] = useState<Phase>("idle");
   const [shownWords, setShownWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [testRound, setTestRound] = useState<{ word: string; wasSeen: boolean }[]>([]);
@@ -19,6 +27,8 @@ export default function WordMemoryPage() {
   const correctRef = useRef(0);
   const [lastAnswer, setLastAnswer] = useState<"correct" | "wrong" | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { memCount, testCount, displayMs } = SETTINGS[difficulty];
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -29,7 +39,7 @@ export default function WordMemoryPage() {
 
   const startMemorize = useCallback(() => {
     clearTimer();
-    const words = pickWords(MEMORIZE_WORDS);
+    const words = pickWords(memCount);
     setShownWords(words);
     setCurrentWordIndex(0);
     setPhase("memorize");
@@ -37,13 +47,13 @@ export default function WordMemoryPage() {
     correctRef.current = 0;
     setTestIndex(0);
     setLastAnswer(null);
-  }, [clearTimer]);
+  }, [clearTimer, memCount]);
 
   // Auto-advance words during memorize phase
   useEffect(() => {
     if (phase !== "memorize") return;
     if (currentWordIndex >= shownWords.length) {
-      const round = buildTestRound(shownWords, WORD_POOL, TEST_COUNT);
+      const round = buildTestRound(shownWords, WORD_POOL, testCount);
       setTestRound(round);
       setTestIndex(0);
       setPhase("test");
@@ -51,11 +61,11 @@ export default function WordMemoryPage() {
     }
     timerRef.current = setTimeout(() => {
       setCurrentWordIndex((i) => i + 1);
-    }, 1500);
+    }, displayMs);
     return clearTimer;
-  }, [phase, currentWordIndex, shownWords, clearTimer]);
+  }, [phase, currentWordIndex, shownWords, clearTimer, testCount, displayMs]);
 
-  const handleAnswer = (answeredSeen: boolean) => {
+  const handleAnswer = useCallback((answeredSeen: boolean) => {
     if (phase !== "test" || lastAnswer !== null) return;
     const current = testRound[testIndex];
     const correct = answeredSeen === current.wasSeen;
@@ -74,21 +84,57 @@ export default function WordMemoryPage() {
         setTestIndex((i) => i + 1);
       }
     }, 600);
+  }, [phase, lastAnswer, testRound, testIndex]);
+
+  const handleDifficulty = (d: Difficulty) => {
+    setDifficulty(d);
+    saveDifficulty(GAME_ID, d);
   };
 
+  // Keyboard: Y/← = Seen, N/→ = New
   useEffect(() => {
-    startMemorize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (phase !== "test" || lastAnswer !== null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" || e.key === "y") handleAnswer(true);
+      if (e.key === "ArrowRight" || e.key === "n") handleAnswer(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, lastAnswer, handleAnswer]);
+
+  // Enter to start from idle
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") startMemorize();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, startMemorize]);
 
   return (
     <GameShell
-      gameId="word-memory"
+      gameId={GAME_ID}
       title="Word Memory"
       score={score}
-      onRestart={startMemorize}
-      instructions="First, memorize the words shown one by one. Then, for each word, say whether you saw it before or not!"
+      onRestart={() => setPhase("idle")}
+      instructions="Memorize the words shown one by one. Then say whether each word was seen or new! Use Y/← for Seen, N/→ for New."
+      difficulty={difficulty}
     >
+      {phase === "idle" && (
+        <div className="flex flex-col items-center gap-4 py-12">
+          <p className="text-gray-500">Memorize words and test your recall!</p>
+          <DifficultySelector difficulty={difficulty} onChange={handleDifficulty} />
+          <button
+            onClick={startMemorize}
+            className="rounded-xl bg-gray-900 px-8 py-3 text-lg font-medium text-white hover:bg-gray-700"
+          >
+            Start
+          </button>
+          <p className="text-xs text-gray-400">or press Enter</p>
+        </div>
+      )}
+
       {phase === "memorize" && currentWordIndex < shownWords.length && (
         <div className="flex flex-col items-center gap-4 py-16">
           <p className="text-sm text-gray-400">
@@ -120,14 +166,14 @@ export default function WordMemoryPage() {
               disabled={lastAnswer !== null}
               className="rounded-xl border-2 border-green-300 bg-green-50 px-8 py-3 font-semibold text-green-700 transition-all hover:bg-green-100 cursor-pointer disabled:opacity-50"
             >
-              Seen
+              Seen <span className="text-xs text-green-500">Y / ←</span>
             </button>
             <button
               onClick={() => handleAnswer(false)}
               disabled={lastAnswer !== null}
               className="rounded-xl border-2 border-gray-300 bg-gray-50 px-8 py-3 font-semibold text-gray-700 transition-all hover:bg-gray-100 cursor-pointer disabled:opacity-50"
             >
-              New
+              New <span className="text-xs text-gray-500">N / →</span>
             </button>
           </div>
         </div>
@@ -136,7 +182,7 @@ export default function WordMemoryPage() {
       {phase === "results" && (
         <div className="flex flex-col items-center gap-4 py-12">
           <div className="rounded-lg bg-blue-50 p-6 text-center">
-            <p className="text-3xl font-bold text-blue-700">{score}/{TEST_COUNT}</p>
+            <p className="text-3xl font-bold text-blue-700">{score}/{testCount}</p>
             <p className="text-blue-600">correct answers</p>
           </div>
         </div>

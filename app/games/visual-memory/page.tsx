@@ -2,22 +2,29 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import GameShell from "@/components/GameShell";
+import DifficultySelector from "@/components/DifficultySelector";
 import { generateGrid, checkAnswer, type Grid } from "@/lib/games/visual-memory";
+import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
 
+const GAME_ID = "visual-memory";
 const MAX_LIVES = 3;
 const MEMORIZE_MS = 1500;
 
 type Phase = "idle" | "memorize" | "input" | "correct" | "wrong" | "over";
 
 export default function VisualMemoryPage() {
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => getSavedDifficulty(GAME_ID));
   const [grid, setGrid] = useState<Grid>(() => generateGrid(1));
   const [selected, setSelected] = useState<number[]>([]);
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(MAX_LIVES);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const score = level - 1;
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const cancelledRef = useRef(false);
+
+  const offset = DIFFICULTY_OFFSET[difficulty];
 
   const clearAllTimeouts = useCallback(() => {
     timeoutsRef.current.forEach(clearTimeout);
@@ -42,19 +49,21 @@ export default function VisualMemoryPage() {
     const newGrid = generateGrid(lvl);
     setGrid(newGrid);
     setSelected([]);
+    setFocusedIndex(0);
     setPhase("memorize");
     addTimeout(() => setPhase("input"), MEMORIZE_MS);
   }, [addTimeout]);
 
   const start = useCallback(() => {
     clearAllTimeouts();
-    setLevel(1);
+    const startLvl = 1 + offset;
+    setLevel(startLvl);
     setLives(MAX_LIVES);
     cancelledRef.current = false;
-    startLevel(1);
-  }, [clearAllTimeouts, startLevel]);
+    startLevel(startLvl);
+  }, [clearAllTimeouts, startLevel, offset]);
 
-  const handleTileClick = (idx: number) => {
+  const handleTileClick = useCallback((idx: number) => {
     if (phase !== "input") return;
     if (selected.includes(idx)) {
       setSelected(selected.filter((i) => i !== idx));
@@ -81,6 +90,11 @@ export default function VisualMemoryPage() {
         }
       }
     }
+  }, [phase, selected, grid, level, lives, addTimeout, startLevel]);
+
+  const handleDifficulty = (d: Difficulty) => {
+    setDifficulty(d);
+    saveDifficulty(GAME_ID, d);
   };
 
   const activeTilesSet = useMemo(() => new Set(grid.activeTiles), [grid]);
@@ -106,23 +120,69 @@ export default function VisualMemoryPage() {
     }
   };
 
+  // Keyboard: arrow keys to navigate, Enter/Space to toggle
+  useEffect(() => {
+    if (phase !== "input") return;
+    const total = grid.size * grid.size;
+    const handler = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "ArrowRight":
+          e.preventDefault();
+          setFocusedIndex((i) => Math.min(i + 1, total - 1));
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          setFocusedIndex((i) => Math.max(i - 1, 0));
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          setFocusedIndex((i) => Math.min(i + grid.size, total - 1));
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          setFocusedIndex((i) => Math.max(i - grid.size, 0));
+          break;
+        case "Enter":
+        case " ":
+          e.preventDefault();
+          handleTileClick(focusedIndex);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, grid.size, focusedIndex, handleTileClick]);
+
+  // Enter to start from idle
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") start();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [phase, start]);
+
   return (
     <GameShell
-      gameId="visual-memory"
+      gameId={GAME_ID}
       title="Visual Memory"
       score={score}
-      onRestart={start}
-      instructions="Memorize the highlighted tiles, then click them from memory. You have 3 lives. The grid grows as you level up!"
+      onRestart={() => { clearAllTimeouts(); setPhase("idle"); setLevel(1); }}
+      instructions="Memorize the highlighted tiles, then click them from memory. Arrow keys + Enter to navigate. You have 3 lives!"
+      difficulty={difficulty}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">
           <p className="text-gray-500">Remember the pattern and recreate it!</p>
+          <DifficultySelector difficulty={difficulty} onChange={handleDifficulty} />
           <button
             onClick={start}
             className="rounded-xl bg-gray-900 px-8 py-3 text-lg font-medium text-white hover:bg-gray-700"
           >
             Start
           </button>
+          <p className="text-xs text-gray-400">or press Enter</p>
         </div>
       )}
 
@@ -180,6 +240,7 @@ export default function VisualMemoryPage() {
                   className={`h-12 w-12 rounded-lg border-2 transition-all duration-150
                     ${tileClass(state)}
                     ${phase === "input" ? "cursor-pointer" : "cursor-default"}
+                    ${phase === "input" && idx === focusedIndex ? "ring-2 ring-blue-500 ring-offset-2" : ""}
                   `}
                 />
               );
