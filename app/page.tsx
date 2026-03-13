@@ -51,6 +51,27 @@ const games = [
     category: "memory" as const,
   },
   {
+    title: "Chimp Test",
+    description: "Numbers flash and hide. Click them in order. How many can you track?",
+    href: "/games/chimp-test",
+    emoji: "🐵",
+    category: "memory" as const,
+  },
+  {
+    title: "Color Memory",
+    description: "Memorize the colors, then recreate the pattern from memory.",
+    href: "/games/color-memory",
+    emoji: "🎨",
+    category: "memory" as const,
+  },
+  {
+    title: "Math Chain",
+    description: "Chain operations to hit the target number. Think ahead!",
+    href: "/games/math-chain",
+    emoji: "🔗",
+    category: "math" as const,
+  },
+  {
     title: "Word Scramble",
     description: "Unscramble the letters to reveal the hidden word.",
     href: "/games/word-scramble",

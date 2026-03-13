@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getHighScore, setHighScore } from "@/lib/scores";
+import { isMuted, toggleMute } from "@/lib/sounds";
 import type { Difficulty } from "@/lib/difficulty";
 
 interface GameShellProps {
@@ -31,6 +32,11 @@ export default function GameShell({
   const scoreKey = difficulty ? `${gameId}-${difficulty}` : gameId;
   const [highScore, setHigh] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  const [muted, setMutedState] = useState(false);
+
+  useEffect(() => {
+    setMutedState(isMuted());
+  }, []);
 
   useEffect(() => {
     setHigh(getHighScore(scoreKey));
@@ -76,6 +82,13 @@ export default function GameShell({
           <span className="text-sm text-gray-500">
             Best: <span className="font-semibold text-gray-900">{highScore}</span>
           </span>
+          <button
+            onClick={() => { const next = toggleMute(); setMutedState(next); }}
+            className="rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+            title={muted ? "Unmute sounds" : "Mute sounds"}
+          >
+            {muted ? "\u{1F507}" : "\u{1F50A}"}
+          </button>
           <button
             onClick={onRestart}
             className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-700"

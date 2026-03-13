@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { pickWords, buildTestRound, WORD_POOL } from "@/lib/games/word-memory";
 import { type Difficulty, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "word-memory";
 
@@ -71,7 +72,10 @@ export default function WordMemoryPage() {
     const correct = answeredSeen === current.wasSeen;
 
     if (correct) {
+      playSound("correct");
       correctRef.current += 1;
+    } else {
+      playSound("wrong");
     }
     setLastAnswer(correct ? "correct" : "wrong");
 

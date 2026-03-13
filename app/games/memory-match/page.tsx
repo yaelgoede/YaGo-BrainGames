@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { createBoard, isAllMatched, type Card } from "@/lib/games/memory-match";
 import { type Difficulty, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "memory-match";
 
@@ -58,12 +59,14 @@ export default function MemoryMatchPage() {
       setMoves((m) => m + 1);
       const [first, second] = newSelected;
       if (newCards[first].emoji === newCards[second].emoji) {
+        playSound("correct");
         newCards[first] = { ...newCards[first], matched: true };
         newCards[second] = { ...newCards[second], matched: true };
         setCards(newCards);
         setMatched((m) => m + 1);
         setSelected([]);
       } else {
+        playSound("wrong");
         setLocked(true);
         setTimeout(() => {
           newCards[first] = { ...newCards[first], flipped: false };

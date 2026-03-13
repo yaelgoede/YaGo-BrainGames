@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { COLORS, generateNextColor, checkSequence, type Color } from "@/lib/games/sequence-recall";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "sequence-recall";
 
@@ -105,11 +106,14 @@ export default function SequenceRecallPage() {
     addTimeout(() => setActiveColor(null), 200);
 
     if (!checkSequence(sequence, newInput)) {
+      playSound("wrong");
+      playSound("gameOver");
       setPhase("gameover");
       return;
     }
 
     if (newInput.length === sequence.length) {
+      playSound("correct");
       setScore(sequence.length);
       addTimeout(() => startNewRound(), 800);
     }

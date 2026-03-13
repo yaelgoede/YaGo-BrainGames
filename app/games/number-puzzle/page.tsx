@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generatePuzzle, type NumberPuzzle } from "@/lib/games/number-puzzle";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "number-puzzle";
 
@@ -39,6 +40,7 @@ export default function NumberPuzzlePage() {
     if (feedback) return;
 
     if (choice === puzzle.answer) {
+      playSound("correct");
       const newStreak = streak + 1;
       setStreak(newStreak);
       setScore((s) => s + 1);
@@ -48,6 +50,7 @@ export default function NumberPuzzlePage() {
         setFeedback(null);
       }, 600);
     } else {
+      playSound("wrong");
       setFeedback("wrong");
       setTimeout(() => {
         setStreak(0);
