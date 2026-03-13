@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type Category = "memory" | "math" | "words";
+type Category = "memory" | "math" | "words" | "logic";
 
 interface GameCardProps {
   title: string;
@@ -28,6 +28,12 @@ const categoryStyles: Record<Category, { bg: string; badge: string; badgeText: s
     badge: "bg-purple-100 text-purple-600",
     badgeText: "Words",
     border: "hover:border-purple-300",
+  },
+  logic: {
+    bg: "hover:bg-orange-50",
+    badge: "bg-orange-100 text-orange-600",
+    badgeText: "Logic",
+    border: "hover:border-orange-300",
   },
 };
 
