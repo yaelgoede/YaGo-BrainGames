@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generateProblem, type MathProblem } from "@/lib/games/mental-math";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "mental-math";
 const GAME_DURATION = 60;
@@ -25,6 +26,7 @@ export default function MentalMathPage() {
   useEffect(() => {
     if (phase !== "playing") return;
     if (timeLeft <= 0) {
+      playSound("gameOver");
       setPhase("over");
       return;
     }
@@ -47,6 +49,7 @@ export default function MentalMathPage() {
 
     const answer = parseInt(input, 10);
     if (answer === problem.answer) {
+      playSound("correct");
       const newScore = score + 1;
       setScore(newScore);
       setProblem(generateProblem(Math.floor(newScore / 3) + 1 + offset));

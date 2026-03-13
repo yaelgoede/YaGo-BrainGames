@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generatePair, getCorrectSide, type NumberPair } from "@/lib/games/speed-compare";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "speed-compare";
 const GAME_DURATION = 60;
@@ -25,6 +26,7 @@ export default function SpeedComparePage() {
   useEffect(() => {
     if (phase !== "playing") return;
     if (timeLeft <= 0) {
+      playSound("gameOver");
       setPhase("over");
       return;
     }
@@ -51,6 +53,7 @@ export default function SpeedComparePage() {
 
     const correct = getCorrectSide(pair);
     if (side === correct) {
+      playSound("correct");
       const newScore = score + 1;
       setScore(newScore);
       setFlash(side);
@@ -60,6 +63,8 @@ export default function SpeedComparePage() {
         setPair(generatePair(Math.floor(newScore / 5) + 1 + offset));
       }, 300);
     } else {
+      playSound("wrong");
+      playSound("gameOver");
       setPhase("over");
     }
   }, [flash, pair, score, offset]);

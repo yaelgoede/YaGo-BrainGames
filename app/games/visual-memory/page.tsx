@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generateGrid, checkAnswer, type Grid } from "@/lib/games/visual-memory";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "visual-memory";
 const MAX_LIVES = 3;
@@ -75,14 +76,18 @@ export default function VisualMemoryPage() {
 
     if (newSelected.length === grid.activeTiles.length) {
       if (checkAnswer(grid.activeTiles, newSelected)) {
+        playSound("correct");
+        playSound("levelUp");
         const newLevel = level + 1;
         setLevel(newLevel);
         setPhase("correct");
         addTimeout(() => startLevel(newLevel), 800);
       } else {
+        playSound("wrong");
         const newLives = lives - 1;
         setLives(newLives);
         if (newLives <= 0) {
+          playSound("gameOver");
           setPhase("over");
         } else {
           setPhase("wrong");

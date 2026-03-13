@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { getRandomWord, scrambleWord } from "@/lib/games/word-scramble";
 import { type Difficulty, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "word-scramble";
 
@@ -47,6 +48,7 @@ export default function WordScramblePage() {
     if (feedback) return;
 
     if (input.toLowerCase().trim() === round.word) {
+      playSound("correct");
       setScore((s) => s + 1);
       setFeedback("correct");
       setTimeout(() => {
@@ -56,6 +58,7 @@ export default function WordScramblePage() {
         inputRef.current?.focus();
       }, 600);
     } else {
+      playSound("wrong");
       setFeedback("wrong");
       setTimeout(() => {
         setFeedback(null);

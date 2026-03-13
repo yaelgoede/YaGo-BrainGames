@@ -5,6 +5,7 @@ import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generateRound, type PatternRound } from "@/lib/games/pattern-recognition";
 import { type Difficulty, DIFFICULTY_OFFSET, getSavedDifficulty, saveDifficulty } from "@/lib/difficulty";
+import { playSound } from "@/lib/sounds";
 
 const GAME_ID = "pattern-recognition";
 
@@ -39,6 +40,7 @@ export default function PatternRecognitionPage() {
     if (feedback) return;
 
     if (index === round.oddIndex) {
+      playSound("correct");
       const newStreak = streak + 1;
       setStreak(newStreak);
       setScore((s) => s + 1);
@@ -48,6 +50,7 @@ export default function PatternRecognitionPage() {
         setFeedback(null);
       }, 600);
     } else {
+      playSound("wrong");
       setFeedback("wrong");
       setTimeout(() => {
         setStreak(0);
