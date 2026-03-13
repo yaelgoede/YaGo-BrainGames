@@ -21,10 +21,14 @@ export default function MathChainPage() {
   const [timeLeft, setTimeLeft] = useState(30);
   const [phase, setPhase] = useState<Phase>("idle");
   const phaseRef = useRef<Phase>("idle");
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  useEffect(() => () => { if (flashTimeout.current) clearTimeout(flashTimeout.current); }, []);
 
   // Timer
   useEffect(() => {
@@ -70,6 +74,9 @@ export default function MathChainPage() {
 
       if (result === round.target) {
         playSound("correct");
+        setFlash("correct");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 300);
         const newRoundNumber = roundNumber + 1;
         setRoundNumber(newRoundNumber);
         startNewRound(config);
@@ -128,6 +135,7 @@ export default function MathChainPage() {
       timeLeft={timeLeft}
       instructions="Chain operations to reach the target number. Pick an operation to apply to your current value. Keys 1-4 to pick, Z or Backspace to undo."
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

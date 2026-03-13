@@ -110,6 +110,7 @@ export default function DeMorgansDuelPage() {
       timeLeft={timeLeft}
       instructions="Two boolean expressions are shown. Decide if they're equivalent or not! Learn De Morgan's Laws, absorption, distribution, and more. Press E for Equivalent, N for Not Equivalent."
       difficulty={difficulty}
+      flash={feedback ? (feedback.correct ? "correct" : "wrong") : null}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

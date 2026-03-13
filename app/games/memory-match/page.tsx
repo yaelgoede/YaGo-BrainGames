@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { createBoard, isAllMatched, type Card } from "@/lib/games/memory-match";
@@ -22,6 +22,10 @@ export default function MemoryMatchPage() {
   const [locked, setLocked] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (flashTimeout.current) clearTimeout(flashTimeout.current); }, []);
 
   const pairCount = PAIR_COUNTS[difficulty];
   const cols = 4;
@@ -60,6 +64,9 @@ export default function MemoryMatchPage() {
       const [first, second] = newSelected;
       if (newCards[first].emoji === newCards[second].emoji) {
         playSound("correct");
+        setFlash("correct");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 300);
         newCards[first] = { ...newCards[first], matched: true };
         newCards[second] = { ...newCards[second], matched: true };
         setCards(newCards);
@@ -67,6 +74,9 @@ export default function MemoryMatchPage() {
         setSelected([]);
       } else {
         playSound("wrong");
+        setFlash("wrong");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 500);
         setLocked(true);
         setTimeout(() => {
           newCards[first] = { ...newCards[first], flipped: false };
@@ -138,6 +148,7 @@ export default function MemoryMatchPage() {
       onRestart={restart}
       instructions="Flip two cards at a time to find matching pairs. Use arrow keys to navigate, Enter to flip."
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

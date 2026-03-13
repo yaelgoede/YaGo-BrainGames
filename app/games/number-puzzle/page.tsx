@@ -96,6 +96,7 @@ export default function NumberPuzzlePage() {
       onRestart={restart}
       instructions="Find the next number in the sequence. Use keys 1-4 to choose."
       difficulty={difficulty}
+      flash={feedback}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

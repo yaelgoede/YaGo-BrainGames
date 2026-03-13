@@ -28,8 +28,10 @@ export default function SequenceRecallPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [activeColor, setActiveColor] = useState<Color | null>(null);
   const [score, setScore] = useState(0);
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
   const cancelledRef = useRef(false);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const offset = DIFFICULTY_OFFSET[difficulty];
 
@@ -93,7 +95,10 @@ export default function SequenceRecallPage() {
   }, [clearAllTimeouts, playSequence, offset]);
 
   useEffect(() => {
-    return clearAllTimeouts;
+    return () => {
+      clearAllTimeouts();
+      if (flashTimeout.current) clearTimeout(flashTimeout.current);
+    };
   }, [clearAllTimeouts]);
 
   const handlePress = useCallback((color: Color) => {
@@ -107,6 +112,9 @@ export default function SequenceRecallPage() {
 
     if (!checkSequence(sequence, newInput)) {
       playSound("wrong");
+      setFlash("wrong");
+      if (flashTimeout.current) clearTimeout(flashTimeout.current);
+      flashTimeout.current = setTimeout(() => setFlash(null), 500);
       playSound("gameOver");
       setPhase("gameover");
       return;
@@ -114,6 +122,9 @@ export default function SequenceRecallPage() {
 
     if (newInput.length === sequence.length) {
       playSound("correct");
+      setFlash("correct");
+      if (flashTimeout.current) clearTimeout(flashTimeout.current);
+      flashTimeout.current = setTimeout(() => setFlash(null), 300);
       setScore(sequence.length);
       addTimeout(() => startNewRound(), 800);
     }
@@ -150,6 +161,7 @@ export default function SequenceRecallPage() {
       gameId={GAME_ID}
       title="Sequence Recall"
       score={score}
+      flash={flash}
       onRestart={() => { clearAllTimeouts(); setPhase("idle"); setScore(0); }}
       instructions="Watch the colored buttons light up, then repeat the sequence. Press R/B/G/Y keys or click!"
       difficulty={difficulty}

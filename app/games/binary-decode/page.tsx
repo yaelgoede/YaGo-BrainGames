@@ -112,6 +112,7 @@ export default function BinaryDecodePage() {
       timeLeft={timeLeft}
       instructions="Convert between binary and decimal! The powers of 2 are shown as a visual aid. Rounds alternate between binary→decimal and decimal→binary."
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

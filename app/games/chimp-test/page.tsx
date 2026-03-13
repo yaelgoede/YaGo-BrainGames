@@ -20,6 +20,10 @@ export default function ChimpTestPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [focusedIndex, setFocusedIndex] = useState(0);
   const bestRoundRef = useRef(0);
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flashTimeout.current) clearTimeout(flashTimeout.current); }, []);
+
   const score = phase === "over" ? bestRoundRef.current : Math.max(round - 1, 0);
 
   const start = useCallback(() => {
@@ -44,6 +48,9 @@ export default function ChimpTestPage() {
         // Clicked empty cell
         if (phase === "playing") {
           playSound("wrong");
+          setFlash("wrong");
+          if (flashTimeout.current) clearTimeout(flashTimeout.current);
+          flashTimeout.current = setTimeout(() => setFlash(null), 500);
           playSound("gameOver");
           setPhase("over");
         }
@@ -52,6 +59,9 @@ export default function ChimpTestPage() {
 
       if (num !== nextExpected) {
         playSound("wrong");
+        setFlash("wrong");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 500);
         playSound("gameOver");
         setPhase("over");
         return;
@@ -143,6 +153,7 @@ export default function ChimpTestPage() {
       onRestart={() => setPhase("idle")}
       instructions="Numbers appear on a grid. Click them in ascending order (1, 2, 3...). After you click the first number, the rest will hide. Each round adds one more number."
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">
