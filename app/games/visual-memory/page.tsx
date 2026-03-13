@@ -21,6 +21,8 @@ export default function VisualMemoryPage() {
   const [lives, setLives] = useState(MAX_LIVES);
   const [phase, setPhase] = useState<Phase>("idle");
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const score = level - 1;
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const cancelledRef = useRef(false);
@@ -42,7 +44,10 @@ export default function VisualMemoryPage() {
   }, []);
 
   useEffect(() => {
-    return clearAllTimeouts;
+    return () => {
+      clearAllTimeouts();
+      if (flashTimeout.current) clearTimeout(flashTimeout.current);
+    };
   }, [clearAllTimeouts]);
 
   const startLevel = useCallback((lvl: number) => {
@@ -77,6 +82,9 @@ export default function VisualMemoryPage() {
     if (newSelected.length === grid.activeTiles.length) {
       if (checkAnswer(grid.activeTiles, newSelected)) {
         playSound("correct");
+        setFlash("correct");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 300);
         playSound("levelUp");
         const newLevel = level + 1;
         setLevel(newLevel);
@@ -84,6 +92,9 @@ export default function VisualMemoryPage() {
         addTimeout(() => startLevel(newLevel), 800);
       } else {
         playSound("wrong");
+        setFlash("wrong");
+        if (flashTimeout.current) clearTimeout(flashTimeout.current);
+        flashTimeout.current = setTimeout(() => setFlash(null), 500);
         const newLives = lives - 1;
         setLives(newLives);
         if (newLives <= 0) {
@@ -176,6 +187,7 @@ export default function VisualMemoryPage() {
       onRestart={() => { clearAllTimeouts(); setPhase("idle"); setLevel(1); }}
       instructions="Memorize the highlighted tiles, then click them from memory. Arrow keys + Enter to navigate. You have 3 lives!"
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getHighScore, setHighScore } from "@/lib/scores";
 import { isMuted, toggleMute } from "@/lib/sounds";
 import type { Difficulty } from "@/lib/difficulty";
@@ -16,6 +16,7 @@ interface GameShellProps {
   timeLeft?: number;
   instructions?: string;
   difficulty?: Difficulty;
+  flash?: "correct" | "wrong" | null;
 }
 
 export default function GameShell({
@@ -28,11 +29,17 @@ export default function GameShell({
   timeLeft,
   instructions,
   difficulty,
+  flash,
 }: GameShellProps) {
   const scoreKey = difficulty ? `${gameId}-${difficulty}` : gameId;
   const [highScore, setHigh] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [muted, setMutedState] = useState(false);
+  const [flashKey, setFlashKey] = useState(0);
+
+  useEffect(() => {
+    if (flash) setFlashKey((k) => k + 1);
+  }, [flash]);
 
   useEffect(() => {
     setMutedState(isMuted());
@@ -104,7 +111,29 @@ export default function GameShell({
         </div>
       )}
 
-      {children}
+      <div
+        key={flashKey}
+        className={`relative rounded-xl ${
+          flash === "correct"
+            ? "animate-flash-correct"
+            : flash === "wrong"
+              ? "animate-flash-wrong"
+              : ""
+        }`}
+      >
+        {children}
+        {flash && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span
+              className={`animate-icon-pop text-6xl ${
+                flash === "correct" ? "text-green-500" : "text-red-500"
+              }`}
+            >
+              {flash === "correct" ? "\u2713" : "\u2717"}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

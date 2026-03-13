@@ -109,6 +109,7 @@ export default function GateSchoolPage() {
       timeLeft={timeLeft}
       instructions="Learn logic gates! A truth table is shown for reference. Given the inputs, pick the correct output (0 or 1). New gates unlock as you score higher. Use keys 0 and 1."
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

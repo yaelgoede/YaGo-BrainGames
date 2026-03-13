@@ -200,6 +200,7 @@ export default function ColorMemoryPage() {
       onRestart={() => { clearAllTimeouts(); setPhase("idle"); setLevel(1); }}
       instructions="Memorize the colors on the grid. When they disappear, assign the correct color to each tile using the palette. Arrow keys to navigate, number keys (1-6) to assign colors, Enter to submit."
       difficulty={difficulty}
+      flash={phase === "correct" ? "correct" : phase === "wrong" ? "wrong" : null}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

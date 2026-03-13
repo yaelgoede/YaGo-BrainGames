@@ -20,8 +20,12 @@ export default function MentalMathPage() {
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [phase, setPhase] = useState<Phase>("idle");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [flash, setFlash] = useState<"correct" | "wrong" | null>(null);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const offset = DIFFICULTY_OFFSET[difficulty];
+
+  useEffect(() => () => { if (flashTimeout.current) clearTimeout(flashTimeout.current); }, []);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -50,6 +54,9 @@ export default function MentalMathPage() {
     const answer = parseInt(input, 10);
     if (answer === problem.answer) {
       playSound("correct");
+      setFlash("correct");
+      if (flashTimeout.current) clearTimeout(flashTimeout.current);
+      flashTimeout.current = setTimeout(() => setFlash(null), 300);
       const newScore = score + 1;
       setScore(newScore);
       setProblem(generateProblem(Math.floor(newScore / 3) + 1 + offset));
@@ -82,6 +89,7 @@ export default function MentalMathPage() {
       timeLeft={timeLeft}
       instructions="Solve as many arithmetic problems as you can in 60 seconds. Type your answer and press Enter!"
       difficulty={difficulty}
+      flash={flash}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

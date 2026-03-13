@@ -106,6 +106,7 @@ export default function SpeedComparePage() {
       timeLeft={timeLeft}
       instructions="Two numbers appear — tap the larger one! Get it wrong and the game is over. Use arrow keys or A/D."
       difficulty={difficulty}
+      flash={flash ? "correct" as const : null}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

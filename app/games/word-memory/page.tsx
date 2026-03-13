@@ -124,6 +124,7 @@ export default function WordMemoryPage() {
       onRestart={() => setPhase("idle")}
       instructions="Memorize the words shown one by one. Then say whether each word was seen or new! Use Y/← for Seen, N/→ for New."
       difficulty={difficulty}
+      flash={lastAnswer}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

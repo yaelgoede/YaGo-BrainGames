@@ -108,6 +108,7 @@ export default function WordScramblePage() {
       onRestart={restart}
       instructions="Unscramble the letters to find the hidden word. Type your answer and press Enter! Escape to skip."
       difficulty={difficulty}
+      flash={feedback}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">

@@ -96,6 +96,7 @@ export default function PatternRecognitionPage() {
       onRestart={restart}
       instructions="Find the number that doesn't fit the pattern. Use number keys 1-8 or click!"
       difficulty={difficulty}
+      flash={feedback}
     >
       {phase === "idle" && (
         <div className="flex flex-col items-center gap-4 py-12">
