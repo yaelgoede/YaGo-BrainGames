@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -9,13 +8,13 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "YaGo BrainGames",
-  description: "Train your brain with fun games",
+  title: "Memory Quest",
+  description: "A never-ending memory challenge with coins, upgrades, and milestones",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "YaGo BrainGames",
+    title: "Memory Quest",
   },
   icons: {
     apple: "/icons/icon-192.png",
@@ -30,14 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} font-sans antialiased`}>
-        <header className="border-b border-gray-200 bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-xl font-bold tracking-tight text-gray-900">
-              YaGo BrainGames
-            </Link>
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl px-6 py-8">
+        <main className="mx-auto max-w-2xl px-4 py-6">
           {children}
         </main>
       </body>

@@ -1,11 +1,11 @@
 {
-  "name": "YaGo BrainGames",
-  "short_name": "BrainGames",
-  "description": "Train your brain with fun games",
+  "name": "Memory Quest",
+  "short_name": "MemQuest",
+  "description": "A never-ending memory challenge with coins, upgrades, and milestones",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fafafa",
-  "theme_color": "#111827",
+  "background_color": "#f5f0ff",
+  "theme_color": "#7c3aed",
   "icons": [
     {
       "src": "/icons/icon-192.png",

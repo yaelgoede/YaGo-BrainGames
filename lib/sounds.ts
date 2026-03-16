@@ -1,4 +1,4 @@
-export type SoundType = "correct" | "wrong" | "click" | "gameOver" | "levelUp";
+export type SoundType = "correct" | "wrong" | "click" | "gameOver" | "levelUp" | "wheelTick" | "jackpot" | "bust" | "scratch" | "collectible" | "eventStart" | "eventComplete" | "scratchWin";
 
 let audioCtx: AudioContext | null = null;
 
@@ -64,41 +64,86 @@ function playClick() {
 }
 
 function playGameOver() {
-  const ctx = getContext();
-  if (!ctx) return;
-
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(300, ctx.currentTime);
-  osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.4);
-  gain.gain.setValueAtTime(0.2, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.4);
+  playSweep(300, 100, 0.4);
 }
 
-function playLevelUp() {
-  const notes = [440, 660, 880];
-  const noteDuration = 0.08;
-  const gap = 0.04;
+function playArpeggio(
+  notes: number[],
+  type: OscillatorType = "sine",
+  duration = 0.1,
+  gap = 0.05,
+  volume = 0.3,
+) {
   notes.forEach((freq, i) => {
-    const offset = i * (noteDuration + gap);
+    const offset = i * (duration + gap);
     const ctx = getContext();
     if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = "sine";
+    osc.type = type;
     osc.frequency.setValueAtTime(freq, ctx.currentTime + offset);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime + offset);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + noteDuration);
+    gain.gain.setValueAtTime(volume, ctx.currentTime + offset);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + duration);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(ctx.currentTime + offset);
-    osc.stop(ctx.currentTime + offset + noteDuration);
+    osc.stop(ctx.currentTime + offset + duration);
   });
+}
+
+function playSweep(
+  startFreq: number,
+  endFreq: number,
+  duration: number,
+  type: OscillatorType = "sawtooth",
+  volume = 0.2,
+) {
+  const ctx = getContext();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(startFreq, ctx.currentTime);
+  osc.frequency.linearRampToValueAtTime(endFreq, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+function playLevelUp() {
+  playArpeggio([440, 660, 880], "sine", 0.08, 0.04);
+}
+
+function playWheelTick() {
+  playTone(1200, 0.03, "sine", 0.1);
+}
+
+function playJackpot() {
+  playArpeggio([523, 659, 784, 1047]);
+}
+
+function playBust() {
+  playSweep(400, 80, 0.5);
+}
+
+function playScratch() {
+  playSweep(800, 200, 0.08, "square", 0.15);
+}
+
+function playCollectible() {
+  playTone(660, 0.06, "sine", 0.25);
+  setTimeout(() => playTone(880, 0.06, "sine", 0.25), 80);
+}
+
+function playEventStart() {
+  playArpeggio([440, 660, 880], "triangle", 0.1, 0.02, 0.25);
+}
+
+function playEventComplete() {
+  playArpeggio([523, 659, 784, 1047], "sine", 0.15, -0.03);
 }
 
 const soundMap: Record<SoundType, () => void> = {
@@ -107,6 +152,14 @@ const soundMap: Record<SoundType, () => void> = {
   click: playClick,
   gameOver: playGameOver,
   levelUp: playLevelUp,
+  wheelTick: playWheelTick,
+  jackpot: playJackpot,
+  bust: playBust,
+  scratch: playScratch,
+  collectible: playCollectible,
+  eventStart: playEventStart,
+  eventComplete: playEventComplete,
+  scratchWin: playJackpot,
 };
 
 export function playSound(type: SoundType): void {
