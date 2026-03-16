@@ -4,10 +4,22 @@ import { safe, store } from "@/lib/storage";
 
 export const MAX_ENERGY = 50;
 export const ENERGY_REGEN_MS = 60_000; // 1 minute
-const ENERGY_REFUND_PER_MATCH = 1;
-const COMBO_ENERGY_BONUS = [0, 0, 1, 2, 3, 5]; // index = combo streak
+const ENERGY_REFUND_PER_MATCH = 2;
+const COMBO_ENERGY_BONUS = [0, 1, 2, 3, 4, 6]; // index = combo streak
+const MATCH_PAIR_ENERGY_BONUS = 3; // instant reward per successful match
 const BASE_COINS_PER_MATCH = 10;
 const BOARD_CLEAR_BONUS = 50;
+
+// ── Safety Net & Second Wind ──────────────────────────
+export const LOW_ENERGY_THRESHOLD = 8;
+const SAFETY_NET_GIFT_MIN = 10;
+const SAFETY_NET_GIFT_MAX = 20;
+export const SAFETY_NET_COOLDOWN_BOARDS = 2;
+export const SECOND_WIND_COOLDOWN_MS = 20 * 60_000; // 20 minutes
+
+// ── Streak Bonuses ────────────────────────────────────
+export const STREAK_ENERGY_INTERVAL = 3;
+export const STREAK_ENERGY_AMOUNT = 5;
 
 // ── Types ──────────────────────────────────────────────
 
@@ -230,21 +242,84 @@ export function checkNewMilestones(
   return MILESTONES.filter((m) => !set.has(m.id) && stats[m.stat] >= m.threshold);
 }
 
+// ── Milestone Helpers (for Achievements page & HUD) ───
+
+const STAT_KEYS: (keyof PlayerStats)[] = [
+  "totalMatches", "totalBoardsCleared", "highestCombo", "highestRound", "totalCoinsEarned",
+];
+
+export function getMilestonesByCategory(): Record<keyof PlayerStats, Milestone[]> {
+  const categories = Object.fromEntries(
+    STAT_KEYS.map((k) => [k, [] as Milestone[]]),
+  ) as Record<keyof PlayerStats, Milestone[]>;
+  for (const m of MILESTONES) {
+    categories[m.stat].push(m);
+  }
+  // Sort each category by threshold
+  for (const k of STAT_KEYS) {
+    categories[k].sort((a, b) => a.threshold - b.threshold);
+  }
+  return categories;
+}
+
+export function getNextMilestone(
+  stat: keyof PlayerStats,
+  stats: PlayerStats,
+  achieved: string[],
+): Milestone | null {
+  const set = new Set(achieved);
+  const candidates = MILESTONES
+    .filter((m) => m.stat === stat && !set.has(m.id))
+    .sort((a, b) => a.threshold - b.threshold);
+  return candidates[0] ?? null;
+}
+
+export function getMilestoneProgress(
+  milestone: Milestone,
+  stats: PlayerStats,
+): number {
+  return Math.min(1, stats[milestone.stat] / milestone.threshold);
+}
+
+export function getClosestMilestone(
+  stats: PlayerStats,
+  achieved: string[],
+): Milestone | null {
+  const set = new Set(achieved);
+  let best: Milestone | null = null;
+  let bestProgress = -1;
+  for (const m of MILESTONES) {
+    if (set.has(m.id)) continue;
+    const progress = Math.min(1, stats[m.stat] / m.threshold);
+    if (progress > bestProgress) {
+      bestProgress = progress;
+      best = m;
+    }
+  }
+  return best;
+}
+
 // ── Reward Calculations ────────────────────────────────
 
-export function calculateMatchReward(combo: number): {
+export function calculateMatchReward(combo: number, round: number = 1): {
   coins: number;
   energyRefund: number;
 } {
   const bonusIdx = Math.min(combo, COMBO_ENERGY_BONUS.length - 1);
+  const baseRefund = ENERGY_REFUND_PER_MATCH + COMBO_ENERGY_BONUS[bonusIdx];
+  // Late-game scaling: +1 energy per match starting at round 5
+  const lateGameBonus = round >= 5 ? Math.floor((round - 4) / 2) + 1 : 0;
   return {
     coins: BASE_COINS_PER_MATCH * Math.max(1, combo),
-    energyRefund: ENERGY_REFUND_PER_MATCH + COMBO_ENERGY_BONUS[bonusIdx],
+    energyRefund: baseRefund + lateGameBonus + MATCH_PAIR_ENERGY_BONUS,
   };
 }
 
-export function calculateBoardClearReward(round: number): number {
-  return BOARD_CLEAR_BONUS + round * 25;
+export function calculateBoardClearReward(round: number): { coins: number; energy: number } {
+  return {
+    coins: BOARD_CLEAR_BONUS + round * 25,
+    energy: Math.min(8, 3 + Math.floor(round / 2)),
+  };
 }
 
 // ── Event Tracking (Lucky Wheel) ─────────────────────────
@@ -261,6 +336,47 @@ export function saveEventClears(n: number): void {
 
 export function resetEventClears(): void {
   store("mq-event-clears", 0);
+}
+
+// ── Streak Bonus ──────────────────────────────────────
+
+export function calculateStreakBonus(boardsThisSession: number): number {
+  if (boardsThisSession > 0 && boardsThisSession % STREAK_ENERGY_INTERVAL === 0) {
+    return STREAK_ENERGY_AMOUNT;
+  }
+  return 0;
+}
+
+// ── Safety Net ────────────────────────────────────────
+
+export function shouldTriggerSafetyNet(
+  energyAmount: number,
+  boardsSinceLastSafetyNet: number,
+): boolean {
+  return energyAmount <= LOW_ENERGY_THRESHOLD && boardsSinceLastSafetyNet >= SAFETY_NET_COOLDOWN_BOARDS;
+}
+
+export function calculateSafetyNetGift(): number {
+  return SAFETY_NET_GIFT_MIN + Math.floor(Math.random() * (SAFETY_NET_GIFT_MAX - SAFETY_NET_GIFT_MIN + 1));
+}
+
+// ── Second Wind ───────────────────────────────────────
+
+export function loadSecondWindTimestamp(): number {
+  return safe<number>("mq-second-wind", 0);
+}
+
+export function saveSecondWindTimestamp(ts: number): void {
+  store("mq-second-wind", ts);
+}
+
+export function isSecondWindAvailable(lastUsed: number): boolean {
+  return Date.now() - lastUsed >= SECOND_WIND_COOLDOWN_MS;
+}
+
+export function getSecondWindCooldownRemaining(lastUsed: number): number {
+  const elapsed = Date.now() - lastUsed;
+  return Math.max(0, SECOND_WIND_COOLDOWN_MS - elapsed);
 }
 
 // ── High Score (simple) ────────────────────────────────

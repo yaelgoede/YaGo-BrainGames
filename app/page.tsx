@@ -31,6 +31,14 @@ import {
   WHEEL_TRIGGER_EVERY,
   loadEventClears,
   saveEventClears,
+  LOW_ENERGY_THRESHOLD,
+  calculateStreakBonus,
+  shouldTriggerSafetyNet,
+  calculateSafetyNetGift,
+  loadSecondWindTimestamp,
+  saveSecondWindTimestamp,
+  isSecondWindAvailable,
+  getSecondWindCooldownRemaining,
 } from "@/lib/games/memory-quest-economy";
 import {
   type QuestCard,
@@ -75,9 +83,6 @@ import {
   type TreasureChest as TreasureChestType,
   type SlotResult,
   SHOP_ITEMS,
-  SLOT_SYMBOL_EMOJIS,
-  CHEST_RARITY_COLORS,
-  CHEST_RARITY_LABELS,
   canAffordShopItem,
   purchaseShopItem,
   playCoinFlip,
@@ -86,10 +91,18 @@ import {
   generateSlotResult,
   recordShopPurchase,
 } from "@/lib/games/memory-quest-shop";
+import BottomTabBar from "@/components/BottomTabBar";
+import FloatingMiniGameButtons from "@/components/FloatingMiniGameButtons";
+import MiniGameOverlay from "@/components/MiniGameOverlay";
+import CoinFlipGame from "@/components/CoinFlipGame";
+import TreasureChestGame from "@/components/TreasureChestGame";
+import SlotMachineGame from "@/components/SlotMachineGame";
+import AchievementsPage from "@/components/AchievementsPage";
+import HUDProgressIndicators from "@/components/HUDProgressIndicators";
 
 // ── Types ──────────────────────────────────────────────
 
-type Phase = "idle" | "playing" | "board-clear" | "event-wheel" | "event-scratch" | "quit-summary" | "shop" | "shop-coin-flip" | "shop-treasure" | "shop-slots";
+type Phase = "idle" | "playing" | "board-clear" | "event-wheel" | "event-scratch" | "quit-summary" | "shop" | "shop-coin-flip" | "shop-treasure" | "shop-slots" | "achievements";
 
 interface MilestoneToast {
   key: number;
@@ -145,6 +158,11 @@ export default function MemoryQuestPage() {
   const [boardClearing, setBoardClearing] = useState(false);
   const [matchedIds, setMatchedIds] = useState<Set<number>>(new Set());
   const [shakeIds, setShakeIds] = useState<Set<number>>(new Set());
+  const [energyFlash, setEnergyFlash] = useState<"drain" | "gain" | null>(null);
+  const [coinBump, setCoinBump] = useState(false);
+  const [displayedBoardCoins, setDisplayedBoardCoins] = useState(0);
+  const prevCoinsRef = useRef(0);
+  const [phaseAnimating, setPhaseAnimating] = useState(false);
 
   // Wheel event state
   const [eventClears, setEventClears] = useState(0);
@@ -174,6 +192,21 @@ export default function MemoryQuestPage() {
   const [slotReelsStopped, setSlotReelsStopped] = useState([false, false, false]);
   const coinFlipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slotTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Energy reward system state
+  const [sessionBoardsCleared, setSessionBoardsCleared] = useState(0);
+  const [boardsSinceLastSafetyNet, setBoardsSinceLastSafetyNet] = useState(0);
+  const [safetyNetGift, setSafetyNetGift] = useState<number | null>(null);
+  const [showSecondWind, setShowSecondWind] = useState(false);
+  const [lastSecondWindTime, setLastSecondWindTime] = useState(0);
+  const [energyFlyup, setEnergyFlyup] = useState<number | null>(null);
+  const [streakToast, setStreakToast] = useState<number | null>(null);
+
+  // Mini-game overlay (plays ON TOP of game board without changing phase)
+  const [miniGameOverlay, setMiniGameOverlay] = useState<ShopGameType | null>(null);
+
+  // Saved game phase for tab navigation (resume game when tapping Play tab)
+  const savedGamePhase = useRef<Phase | null>(null);
 
   // Refs
   const flipBackTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,6 +284,45 @@ export default function MemoryQuestPage() {
     };
   }, []);
 
+  // ── Phase enter animation ───────────────────────────
+
+  useEffect(() => {
+    setPhaseAnimating(true);
+    const t = setTimeout(() => setPhaseAnimating(false), 300);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // ── Coin bump effect ────────────────────────────────
+
+  useEffect(() => {
+    if (coins > prevCoinsRef.current && prevCoinsRef.current > 0) {
+      setCoinBump(true);
+      const t = setTimeout(() => setCoinBump(false), 300);
+      return () => clearTimeout(t);
+    }
+    prevCoinsRef.current = coins;
+  }, [coins]);
+
+  // ── Board clear coin counter animation ─────────────
+
+  useEffect(() => {
+    if (phase !== "board-clear") {
+      setDisplayedBoardCoins(0);
+      return;
+    }
+    if (boardCoins <= 0) return;
+    const steps = Math.min(boardCoins, 20);
+    const stepSize = Math.ceil(boardCoins / steps);
+    const interval = Math.floor(800 / steps);
+    let current = 0;
+    const id = setInterval(() => {
+      current = Math.min(current + stepSize, boardCoins);
+      setDisplayedBoardCoins(current);
+      if (current >= boardCoins) clearInterval(id);
+    }, interval);
+    return () => clearInterval(id);
+  }, [phase, boardCoins]);
+
   // ── Helpers ──────────────────────────────────────────
 
   const config = getBoardConfig(round);
@@ -262,6 +334,15 @@ export default function MemoryQuestPage() {
   const pendingScratchCard = timedEvent !== null && timedEvent.completed && !timedEvent.rewardClaimed;
   const scratchFinished = scratchPrize !== null || (scratchCells.length > 0 && isScratchComplete(scratchCells));
   const eventTimeRemaining = timedEvent && !timedEvent.completed ? getEventTimeRemaining(timedEvent) : 0;
+
+  // Derived: is a game currently in progress?
+  const gameInProgress = phase === "playing" || phase === "board-clear" || phase === "event-wheel" || phase === "event-scratch";
+
+  // Derived: active tab for bottom nav
+  const activeTab = phase === "achievements" ? "achievements" as const
+    : phase === "shop" || phase === "shop-coin-flip" || phase === "shop-treasure" || phase === "shop-slots" ? "shop" as const
+    : gameInProgress ? "play" as const
+    : "home" as const;
 
   const addCoinFloat = useCallback((amount: number, cardIdx: number) => {
     const grid = gridRef.current;
@@ -338,6 +419,10 @@ export default function MemoryQuestPage() {
     setLocked(false);
     setMatchedIds(new Set());
     setShakeIds(new Set());
+    setSessionBoardsCleared(0);
+    setBoardsSinceLastSafetyNet(0);
+    setSafetyNetGift(null);
+    setLastSecondWindTime(loadSecondWindTimestamp());
 
     setBoardEntering(true);
     setTimeout(() => setBoardEntering(false), 600);
@@ -372,10 +457,25 @@ export default function MemoryQuestPage() {
       // Spend energy
       const newEnergy = spendEnergy(energy, 1);
       if (!newEnergy) {
+        // Second Wind: full recharge on 20-minute cooldown
+        if (isSecondWindAvailable(lastSecondWindTime)) {
+          const now = Date.now();
+          setLastSecondWindTime(now);
+          saveSecondWindTimestamp(now);
+          const revived = addEnergy(energy, MAX_ENERGY - energy.amount);
+          setEnergy(revived);
+          saveEnergy(revived);
+          setShowSecondWind(true);
+          playSound("levelUp");
+          setTimeout(() => setShowSecondWind(false), 2500);
+          return; // Block this flip, player can continue next click
+        }
         return; // No energy — block flip, wait for regen
       }
       setEnergy(newEnergy);
       saveEnergy(newEnergy);
+      setEnergyFlash("drain");
+      setTimeout(() => setEnergyFlash(null), 300);
 
       // Flip the card
       const newCards = [...cards];
@@ -446,7 +546,7 @@ export default function MemoryQuestPage() {
       setFlippedIndices([]);
 
       // Rewards
-      const reward = calculateMatchReward(newCombo);
+      const reward = calculateMatchReward(newCombo, round);
       const newCoins = coins + reward.coins;
       setCoins(newCoins);
       saveCoins(newCoins);
@@ -458,6 +558,13 @@ export default function MemoryQuestPage() {
       const refundedEnergy = addEnergy(newEnergy, reward.energyRefund);
       setEnergy(refundedEnergy);
       saveEnergy(refundedEnergy);
+      if (reward.energyRefund > 0) {
+        setEnergyFlash("gain");
+        setTimeout(() => setEnergyFlash(null), 300);
+        // Instant flyup showing energy gained
+        setEnergyFlyup(reward.energyRefund);
+        setTimeout(() => setEnergyFlyup(null), 700);
+      }
 
       // Check collectibles
       if (timedEvent && !timedEvent.completed && !isEventExpired(timedEvent)) {
@@ -531,11 +638,55 @@ export default function MemoryQuestPage() {
 
       // Check board clear
       if (isAllMatched(newCards)) {
-        const clearBonus = calculateBoardClearReward(round);
-        const clearedCoins = newCoins + clearBonus;
+        const clearReward = calculateBoardClearReward(round);
+        const clearedCoins = newCoins + clearReward.coins;
         setCoins(clearedCoins);
         saveCoins(clearedCoins);
-        setSessionCoins((sc) => sc + clearBonus);
+        setSessionCoins((sc) => sc + clearReward.coins);
+
+        // Board clear energy reward
+        if (clearReward.energy > 0) {
+          setEnergy((prev) => {
+            const e = addEnergy(prev, clearReward.energy);
+            saveEnergy(e);
+            return e;
+          });
+        }
+
+        // Streak bonus
+        const newSessionBoards = sessionBoardsCleared + 1;
+        setSessionBoardsCleared(newSessionBoards);
+        const streakBonusAmount = calculateStreakBonus(newSessionBoards);
+        if (streakBonusAmount > 0) {
+          setEnergy((prev) => {
+            const e = addEnergy(prev, streakBonusAmount);
+            saveEnergy(e);
+            return e;
+          });
+          setStreakToast(streakBonusAmount);
+          setTimeout(() => setStreakToast(null), 2000);
+        }
+
+        // Safety net check (between boards)
+        setBoardsSinceLastSafetyNet((prev) => {
+          const newCount = prev + 1;
+          // We need to read energy after all updates, so use setTimeout
+          setTimeout(() => {
+            setEnergy((currentEnergy) => {
+              if (shouldTriggerSafetyNet(currentEnergy.amount, newCount)) {
+                const gift = calculateSafetyNetGift();
+                setSafetyNetGift(gift);
+                setBoardsSinceLastSafetyNet(0);
+                setTimeout(() => setSafetyNetGift(null), 2500);
+                const e = addEnergy(currentEnergy, gift);
+                saveEnergy(e);
+                return e;
+              }
+              return currentEnergy;
+            });
+          }, 100);
+          return newCount;
+        });
 
         setStats((prev) => {
           const updated = {
@@ -598,7 +749,7 @@ export default function MemoryQuestPage() {
         }, 2500);
       }
     },
-    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound],
+    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet],
   );
 
   // ── Quit (show summary, then back to idle) ──────────
@@ -953,6 +1104,71 @@ export default function MemoryQuestPage() {
     setPhase("shop");
   }, [resetShopState]);
 
+  // ── Overlay Mini-Game (during gameplay) ───────────────
+
+  const handleOverlayBuyGame = useCallback((gameType: ShopGameType) => {
+    const item = SHOP_ITEMS.find((i) => i.id === gameType);
+    if (!item) return;
+    const newCoins = purchaseShopItem(coins, item);
+    if (newCoins === null) return;
+
+    playSound("click");
+    setCoins(newCoins);
+    saveCoins(newCoins);
+    recordShopPurchase(item.cost);
+    resetShopState();
+
+    if (gameType === "treasure-chest") {
+      setTreasureChests(generateTreasureChests());
+    }
+
+    setMiniGameOverlay(gameType);
+    setLocked(true);
+  }, [coins, resetShopState]);
+
+  const handleOverlayContinue = useCallback(() => {
+    playSound("click");
+    resetShopState();
+    setMiniGameOverlay(null);
+    setLocked(false);
+  }, [resetShopState]);
+
+  // ── Tab Navigation ──────────────────────────────────
+
+  const handleTabNavigate = useCallback((tab: "home" | "play" | "shop" | "achievements") => {
+    playSound("click");
+
+    // Save current game phase if navigating away from game
+    if (gameInProgress && tab !== "play") {
+      savedGamePhase.current = phase;
+    }
+
+    switch (tab) {
+      case "home":
+        setShowLab(false);
+        setPhase("idle");
+        break;
+      case "play":
+        if (savedGamePhase.current && !gameInProgress) {
+          // Resume saved game
+          setPhase(savedGamePhase.current);
+          savedGamePhase.current = null;
+        } else if (!gameInProgress) {
+          // Start new game
+          start();
+        }
+        // If already in game, do nothing
+        break;
+      case "shop":
+        resetShopState();
+        setPhase("shop");
+        break;
+      case "achievements":
+        setPhase("achievements");
+        break;
+    }
+  }, [gameInProgress, phase, start, resetShopState]);
+
   // ── Keyboard Navigation ──────────────────────────────
 
   useEffect(() => {
@@ -1016,23 +1232,23 @@ export default function MemoryQuestPage() {
   // ── JSX ──────────────────────────────────────────────
 
   return (
-    <div className="relative pb-8">
+    <div className={`relative pb-8 text-white ${phaseAnimating ? "animate-phase-enter" : ""}`}>
       {/* ── Header ──────────────────────────────────── */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="gradient-text text-2xl font-extrabold tracking-tight sm:text-3xl">
+        <h1 className="gradient-text text-glow-purple text-2xl font-extrabold tracking-tight sm:text-3xl">
           Memory Quest
         </h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowHelp((h) => !h)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 text-purple-600 transition hover:bg-purple-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 border border-white/20 text-white transition hover:bg-white/20"
             title="Help"
           >
             ?
           </button>
           <button
             onClick={handleMute}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 text-purple-600 transition hover:bg-purple-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 border border-white/20 text-white transition hover:bg-white/20"
             title={muted ? "Unmute" : "Mute"}
           >
             {muted ? "🔇" : "🔊"}
@@ -1042,8 +1258,8 @@ export default function MemoryQuestPage() {
 
       {/* ── Help Panel ──────────────────────────────── */}
       {showHelp && (
-        <div className="animate-bounce-in mb-4 rounded-2xl bg-white/80 p-4 text-sm text-gray-700 shadow-lg backdrop-blur-sm">
-          <p className="mb-2 font-semibold text-purple-700">How to Play</p>
+        <div className="animate-bounce-in mb-4 rounded-2xl panel-dark p-4 text-sm text-gray-300 shadow-lg">
+          <p className="mb-2 font-semibold text-purple-300">How to Play</p>
           <ul className="list-inside list-disc space-y-1">
             <li>Flip cards to find matching sets (pairs, triples, or quads)</li>
             <li>Each flip costs 1 energy — energy regenerates over time</li>
@@ -1057,84 +1273,105 @@ export default function MemoryQuestPage() {
       )}
 
       {/* ── Economy HUD ─────────────────────────────── */}
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-white/70 p-3 shadow-md backdrop-blur-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl panel-dark-strong gold-frame p-3 shadow-xl">
         {/* Energy */}
-        <div className="flex flex-1 items-center gap-2">
+        <div className="relative flex flex-1 items-center gap-2">
           <span className={`text-lg ${energy.amount <= 5 ? "animate-energy-pulse" : ""}`}>
             ⚡
           </span>
           <div className="flex-1">
-            <div className={`h-3 overflow-hidden rounded-full bg-gray-200 ${energyOverflow ? "animate-glow-gold" : ""}`}>
+            <div className={`h-4 overflow-hidden rounded-full energy-bar-track ${energyOverflow ? "animate-glow-gold" : ""} ${energyFlash === "drain" ? "animate-energy-drain" : ""} ${energyFlash === "gain" ? "animate-energy-gain" : ""} ${!energyOverflow && energy.amount <= LOW_ENERGY_THRESHOLD && phase === "playing" ? "animate-energy-low" : ""}`}>
               <div
-                className={`h-full rounded-full transition-all duration-300 ${energyOverflow ? "bg-gradient-to-r from-yellow-400 to-amber-400" : "energy-bar-gradient"}`}
+                className={`h-full rounded-full transition-all duration-300 ${energyOverflow ? "bg-gradient-to-r from-yellow-400 to-amber-400" : energy.amount <= LOW_ENERGY_THRESHOLD && !energyOverflow ? "bg-gradient-to-r from-red-500 to-orange-400" : "energy-bar-gradient"}`}
                 style={{ width: `${energyPercent}%` }}
               />
             </div>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-xs text-gray-300">
               {energy.amount}/{MAX_ENERGY}
               {energyOverflow && (
-                <span className="ml-1 font-bold text-amber-500">OVERCHARGED</span>
+                <span className="ml-1 font-bold text-gold-bright text-glow-gold">OVERCHARGED</span>
               )}
-              {!energyOverflow && energy.amount < MAX_ENERGY && timeToNextEnergy > 0 && (
+              {!energyOverflow && energy.amount <= LOW_ENERGY_THRESHOLD && phase === "playing" && (
+                <span className="ml-1 font-semibold text-red-400">Low Energy!</span>
+              )}
+              {!energyOverflow && energy.amount > LOW_ENERGY_THRESHOLD && energy.amount < MAX_ENERGY && timeToNextEnergy > 0 && (
                 <span className="ml-1 text-gray-400">+1 in {timeToNextEnergy}s</span>
+              )}
+              {!energyOverflow && !isSecondWindAvailable(lastSecondWindTime) && phase === "playing" && (
+                <span className="ml-1 text-green-400/60 text-[10px]">⟳ {Math.ceil(getSecondWindCooldownRemaining(lastSecondWindTime) / 60_000)}m</span>
               )}
             </p>
           </div>
+          {/* Energy flyup on match */}
+          {energyFlyup !== null && (
+            <div className="animate-energy-flyup pointer-events-none absolute -top-1 right-0 z-10 font-bold text-green-400 text-sm">
+              +{energyFlyup} ⚡
+            </div>
+          )}
         </div>
 
         {/* Coins */}
-        <div className="flex items-center gap-1 rounded-xl bg-gold-100 px-3 py-1.5">
+        <div className={`sparkle-container flex items-center gap-1 rounded-xl coin-badge px-3 py-1.5 ${coinBump ? "animate-counter-bump" : ""}`}>
           <span>🪙</span>
-          <span className="font-bold text-gold-600">{coins.toLocaleString()}</span>
+          <span className="font-bold text-yellow-300 text-glow-gold text-number-bold">{coins.toLocaleString()}</span>
         </div>
 
         {/* Round (during game) */}
         {phase === "playing" && (
-          <div className="flex items-center gap-1 rounded-xl bg-purple-100 px-3 py-1.5">
-            <span className="text-sm font-semibold text-purple-700">R{round}</span>
+          <div className="flex items-center gap-1 rounded-xl bg-purple-500/20 border border-purple-500/30 px-3 py-1.5">
+            <span className="text-sm font-semibold text-purple-300">R{round}</span>
           </div>
         )}
 
         {/* Combo (during game) */}
         {phase === "playing" && combo > 1 && (
           <div
-            className={`flex items-center gap-1 rounded-xl bg-green-100 px-3 py-1.5 font-bold text-green-600 ${
+            className={`flex items-center gap-1 rounded-xl bg-green-500/20 border border-green-500/30 px-3 py-1.5 font-bold text-green-400 text-glow-gold ${
               comboAnim ? "animate-combo-pop" : ""
-            }`}
+            } ${combo >= 5 ? "animate-combo-fire" : ""}`}
           >
             {combo}x
           </div>
         )}
       </div>
 
+      {/* ── HUD Progress Indicators (during gameplay) ── */}
+      {phase === "playing" && (
+        <HUDProgressIndicators
+          eventClears={eventClears}
+          stats={stats}
+          achievedMilestones={achievedMilestones}
+        />
+      )}
+
       {/* ── IDLE PHASE ──────────────────────────────── */}
       {phase === "idle" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
           {/* Lab Display */}
           <div className="flex flex-col items-center gap-2">
-            <div className="animate-upgrade-glow flex h-24 w-24 items-center justify-center rounded-3xl bg-purple-100 text-5xl">
+            <div className="hero-glow animate-upgrade-glow glow-bloom flex h-28 w-28 items-center justify-center rounded-3xl bg-purple-500/20 border-2 border-purple-500/30 text-5xl">
               {currentUpgrade.emoji}
             </div>
-            <p className="font-bold text-purple-700">{currentUpgrade.name}</p>
-            <p className="text-xs text-gray-400">Lab Level {labLevel}</p>
+            <p className="font-bold text-purple-300 text-glow-purple">{currentUpgrade.name}</p>
+            <p className="text-xs text-gray-400 text-number-bold">Lab Level {labLevel}</p>
           </div>
 
           {/* Upgrade Button */}
           <button
             onClick={() => setShowLab((l) => !l)}
-            className="rounded-xl bg-purple-100 px-4 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-200"
+            className="rounded-xl bg-purple-500/20 border-2 border-purple-500/30 px-4 py-2 text-sm font-semibold text-purple-300 transition hover:bg-purple-500/30"
           >
             {showLab ? "Hide Lab" : "Upgrade Lab"}
           </button>
 
           {showLab && (
-            <div className="animate-bounce-in w-full max-w-sm rounded-2xl bg-white/80 p-4 shadow-lg backdrop-blur-sm">
-              <p className="mb-2 text-center text-sm font-semibold text-gray-600">Next Upgrade</p>
+            <div className="animate-bounce-in w-full max-w-sm rounded-2xl panel-dark p-4 shadow-lg">
+              <p className="mb-2 text-center text-sm font-semibold text-gray-300">Next Upgrade</p>
               <div className="mb-3 flex items-center justify-center gap-3">
                 <span className="text-3xl">{nextUpgrade.emoji}</span>
                 <div>
-                  <p className="font-bold text-purple-700">{nextUpgrade.name}</p>
-                  <p className="text-sm text-gold-600">🪙 {nextUpgrade.cost.toLocaleString()}</p>
+                  <p className="font-bold text-purple-300">{nextUpgrade.name}</p>
+                  <p className="text-sm text-yellow-300 text-glow-gold">🪙 {nextUpgrade.cost.toLocaleString()}</p>
                 </div>
               </div>
               <button
@@ -1143,7 +1380,7 @@ export default function MemoryQuestPage() {
                 className={`w-full rounded-xl py-2.5 font-bold text-white transition ${
                   canAffordUpgrade(coins, labLevel)
                     ? "gradient-btn animate-shimmer"
-                    : "cursor-not-allowed bg-gray-300"
+                    : "cursor-not-allowed bg-gray-700 text-gray-400"
                 }`}
               >
                 {canAffordUpgrade(coins, labLevel) ? "Purchase" : "Not enough coins"}
@@ -1154,7 +1391,7 @@ export default function MemoryQuestPage() {
           {/* Shop Button */}
           <button
             onClick={handleOpenShop}
-            className="rounded-xl bg-gold-100 px-4 py-2 text-sm font-semibold text-gold-600 transition hover:bg-gold-300"
+            className="sparkle-container rounded-xl coin-badge px-4 py-2 text-sm font-semibold text-yellow-300 text-glow-gold transition hover:brightness-110"
           >
             🏪 Shop
           </button>
@@ -1167,20 +1404,22 @@ export default function MemoryQuestPage() {
             <StatCard label="Best Round" value={stats.highestRound} />
           </div>
 
+          <div className="divider-ornate" />
+
           {highScore > 0 && (
-            <p className="text-sm text-purple-500">
-              High Score: <span className="font-bold">{highScore}</span> matches in one run
+            <p className="text-sm text-gold-400 text-glow-gold">
+              High Score: <span className="font-bold text-number-bold">{highScore}</span> matches in one run
             </p>
           )}
 
           {/* Start Button */}
           <button
             onClick={start}
-            className="gradient-btn animate-gradient w-full max-w-xs rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
+            className="gradient-btn-gold glow-bloom-gold animate-gradient w-full max-w-xs rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-purple-900 shadow-lg transition"
           >
             Start Quest
           </button>
-          <p className="text-xs text-gray-400">or press Enter</p>
+          <p className="text-xs text-gray-500">or press Enter</p>
         </div>
       )}
 
@@ -1191,7 +1430,7 @@ export default function MemoryQuestPage() {
           <div className="mb-2 flex justify-end">
             <button
               onClick={quit}
-              className="rounded-lg bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500 transition hover:bg-gray-200 hover:text-gray-700"
+              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
             >
               Quit
             </button>
@@ -1200,7 +1439,7 @@ export default function MemoryQuestPage() {
           {/* Event HUD Banner */}
           {timedEvent && !timedEvent.completed && !isEventExpired(timedEvent) && (
             <div
-              className="animate-event-pulse mb-3 flex items-center justify-between gap-3 rounded-2xl bg-white/80 px-4 py-2.5 shadow-md backdrop-blur-sm"
+              className="animate-event-pulse mb-3 flex items-center justify-between gap-3 rounded-2xl panel-dark-strong px-4 py-2.5 shadow-md"
               style={{ "--event-color": `${timedEvent.theme.color}40` } as React.CSSProperties}
             >
               <div className="flex items-center gap-2">
@@ -1222,7 +1461,7 @@ export default function MemoryQuestPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-20">
-                  <div className="h-2.5 overflow-hidden rounded-full bg-gray-200">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-black/40">
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
@@ -1232,7 +1471,7 @@ export default function MemoryQuestPage() {
                     />
                   </div>
                 </div>
-                <span className="text-xs font-bold text-gray-600">
+                <span className="text-xs font-bold text-gray-300">
                   {timedEvent.collected}/{timedEvent.target}
                 </span>
               </div>
@@ -1258,14 +1497,22 @@ export default function MemoryQuestPage() {
               const isFlipped = card.flipped || card.matched;
               const justMatched = matchedIds.has(i);
               const isShaking = shakeIds.has(i);
+              const row = Math.floor(i / config.cols);
+              const col = i % config.cols;
 
               return (
                 <div
                   key={card.id}
                   className={`card-container ${cardHeight} relative cursor-pointer ${
                     boardEntering ? "animate-board-enter" : ""
-                  } ${boardClearing ? "animate-board-clear" : ""}`}
-                  style={boardEntering ? { animationDelay: `${i * 30}ms` } : undefined}
+                  } ${boardClearing ? "animate-board-clear" : ""} ${justMatched ? "animate-match-ring" : ""}`}
+                  style={
+                    boardEntering
+                      ? { animationDelay: `${(row + col) * 40}ms` }
+                      : boardClearing
+                        ? { animationDelay: `${(cards.length - 1 - i) * 25}ms` }
+                        : undefined
+                  }
                   onClick={() => handleFlip(i)}
                 >
                   <div
@@ -1276,7 +1523,7 @@ export default function MemoryQuestPage() {
                     {/* Back face (hidden side, shown by default) */}
                     <div
                       className={`card-back card-shadow ${cardFontSize} select-none ${
-                        i === focusedIndex && !card.matched ? "ring-3 ring-purple-400 ring-offset-2" : ""
+                        i === focusedIndex && !card.matched ? "ring-3 ring-gold-400 ring-offset-2 animate-focus-ring" : ""
                       } ${card.matched ? "opacity-50" : "hover:brightness-110"}`}
                     >
                       <span className="text-white/80">?</span>
@@ -1285,7 +1532,7 @@ export default function MemoryQuestPage() {
                     <div
                       className={`card-front ${cardFontSize} select-none ${
                         card.matched ? "card-shadow-matched opacity-70" : "card-shadow"
-                      } ${i === focusedIndex && !card.matched ? "ring-3 ring-purple-400 ring-offset-2" : ""}`}
+                      } ${i === focusedIndex && !card.matched ? "ring-3 ring-gold-400 ring-offset-2" : ""} ${isShaking ? "animate-mismatch-flash" : ""}`}
                     >
                       {card.emoji}
                     </div>
@@ -1325,11 +1572,11 @@ export default function MemoryQuestPage() {
 
           {/* Waiting for energy overlay */}
           {energy.amount <= 0 && (
-            <div className="animate-bounce-in mt-4 flex flex-col items-center gap-2 rounded-2xl bg-white/90 py-4 shadow-lg backdrop-blur-sm">
+            <div className="animate-bounce-in mt-4 flex flex-col items-center gap-2 rounded-2xl panel-dark-strong py-4 shadow-lg">
               <span className="animate-energy-pulse text-3xl">⚡</span>
-              <p className="font-bold text-purple-700">Waiting for energy...</p>
+              <p className="font-bold text-purple-300">Waiting for energy...</p>
               {timeToNextEnergy > 0 && (
-                <p className="text-sm text-gray-500">+1 in {timeToNextEnergy}s</p>
+                <p className="text-sm text-gray-400">+1 in {timeToNextEnergy}s</p>
               )}
             </div>
           )}
@@ -1338,33 +1585,44 @@ export default function MemoryQuestPage() {
 
       {/* ── BOARD CLEAR PHASE ───────────────────────── */}
       {phase === "board-clear" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-4 py-12 text-center">
-          <p className="text-5xl">🎉</p>
-          <h2 className="gradient-text text-3xl font-extrabold">Board Cleared!</h2>
-          <p className="text-lg text-gray-600">Round {round} complete</p>
-          <div className="flex items-center gap-2 text-lg">
-            <span>🪙</span>
-            <span className="font-bold text-gold-600">+{boardCoins.toLocaleString()} coins</span>
+        <>
+          <div className="confetti-container">
+            <span /><span /><span /><span /><span /><span /><span /><span />
+            <span /><span /><span /><span /><span /><span /><span /><span />
           </div>
-          <div className="mt-4 rounded-2xl bg-white/70 px-6 py-3 shadow-md backdrop-blur-sm">
-            <p className="text-sm text-gray-500">Next up:</p>
-            <p className="font-bold text-purple-700">
-              {getBoardConfig(round + 1).rows}x{getBoardConfig(round + 1).cols} board
-              {getMatchSize(round + 1) > 2 && (
-                <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs">
-                  Match {getMatchSize(round + 1)}
+          <div className="gold-flash-overlay" />
+          <div className="animate-elastic-bounce flex flex-col items-center gap-4 py-12 text-center">
+            <div className="reward-frame rounded-3xl mx-4 px-8 py-8 flex flex-col items-center gap-4">
+              <p className="text-5xl">🎉</p>
+              <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">Board Cleared!</h2>
+              <p className="text-lg text-gray-300">Round {round} complete</p>
+              <div className="flex items-center gap-2 text-lg">
+                <span>🪙</span>
+                <span className={`font-bold text-yellow-300 text-glow-gold text-number-bold ${displayedBoardCoins < boardCoins ? "animate-count-glow" : ""}`}>
+                  +{displayedBoardCoins.toLocaleString()} coins
                 </span>
-              )}
-            </p>
+              </div>
+              <div className="mt-4 rounded-2xl panel-dark px-6 py-3">
+                <p className="text-sm text-gray-400">Next up:</p>
+                <p className="font-bold text-purple-300">
+                  {getBoardConfig(round + 1).rows}x{getBoardConfig(round + 1).cols} board
+                  {getMatchSize(round + 1) > 2 && (
+                    <span className="ml-2 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 text-xs">
+                      Match {getMatchSize(round + 1)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ── LUCKY WHEEL PHASE ─────────────────────── */}
       {phase === "event-wheel" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-text text-2xl font-extrabold">Lucky Wheel!</h2>
-          <p className="text-sm text-gray-500">Spin to win coins & energy</p>
+          <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">Lucky Wheel!</h2>
+          <p className="text-sm text-gray-400">Spin to win coins & energy</p>
 
           {/* Wheel container */}
           <div className="relative">
@@ -1375,7 +1633,7 @@ export default function MemoryQuestPage() {
 
             {/* Wheel */}
             <div
-              className="relative h-64 w-64 rounded-full border-4 border-purple-300 shadow-xl sm:h-72 sm:w-72"
+              className="relative h-64 w-64 rounded-full border-4 border-gold-premium shadow-xl glow-bloom-gold sm:h-72 sm:w-72"
               style={{
                 transform: `rotate(${wheelRotation}deg)`,
                 transition: wheelSpinning
@@ -1448,7 +1706,7 @@ export default function MemoryQuestPage() {
               disabled={wheelSpinning}
               className={`w-full max-w-xs rounded-2xl py-4 text-xl font-extrabold text-white shadow-lg transition ${
                 wheelSpinning
-                  ? "cursor-not-allowed bg-gray-400"
+                  ? "cursor-not-allowed bg-gray-700 text-gray-400"
                   : "gradient-btn animate-gradient bg-[length:200%_200%]"
               }`}
             >
@@ -1461,10 +1719,10 @@ export default function MemoryQuestPage() {
                   <div
                     className={`rounded-2xl px-6 py-4 text-center shadow-lg ${
                       WHEEL_SEGMENTS[wheelResult].label === "JACKPOT"
-                        ? "animate-glow-gold border-2 border-gold-400 bg-gold-100"
+                        ? "animate-glow-gold reward-frame"
                         : WHEEL_SEGMENTS[wheelResult].coins === 0 && WHEEL_SEGMENTS[wheelResult].energy === 0
-                        ? "border-2 border-red-400 bg-red-100"
-                        : "border-2 border-purple-300 bg-purple-100"
+                        ? "border-2 border-red-500/50 bg-red-500/10"
+                        : "border-2 border-purple-500/50 bg-purple-500/10"
                     }`}
                   >
                     <p className="text-4xl">{WHEEL_SEGMENTS[wheelResult].emoji}</p>
@@ -1478,7 +1736,7 @@ export default function MemoryQuestPage() {
                         : `+${WHEEL_SEGMENTS[wheelResult].energy} energy!`}
                     </p>
                     {WHEEL_SEGMENTS[wheelResult].label === "JACKPOT" && (
-                      <p className="text-sm text-gold-600">
+                      <p className="text-sm text-yellow-300 text-glow-gold">
                         +{WHEEL_SEGMENTS[wheelResult].coins} coins & +{WHEEL_SEGMENTS[wheelResult].energy} energy
                       </p>
                     )}
@@ -1502,8 +1760,8 @@ export default function MemoryQuestPage() {
           <div className="flex items-center gap-2">
             <span className="text-3xl">{timedEvent.theme.collectibleEmoji}</span>
             <div>
-              <h2 className="gradient-text text-2xl font-extrabold">Scratch Card!</h2>
-              <p className="text-xs text-gray-500">
+              <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">Scratch Card!</h2>
+              <p className="text-xs text-gray-400">
                 <span
                   className="mr-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
                   style={{ backgroundColor: TIER_COLORS[timedEvent.tier] }}
@@ -1527,15 +1785,17 @@ export default function MemoryQuestPage() {
                   key={i}
                   onClick={() => handleScratchReveal(i)}
                   disabled={cell.revealed || scratchFinished}
-                  className={`flex h-20 w-20 items-center justify-center rounded-xl text-3xl transition-all ${
+                  className={`relative flex h-20 w-20 items-center justify-center rounded-xl text-3xl transition-all ${
                     cell.revealed
                       ? isWinner
-                        ? "animate-scratch-win border-2 border-gold-400 bg-gold-100"
-                        : "border-2 border-gray-200 bg-white"
-                      : "scratch-cover cursor-pointer border-2 border-purple-300 hover:brightness-110"
+                        ? "animate-scratch-win border-2 border-gold-400 bg-gold-500/10"
+                        : "border-2 border-white/20 bg-white/5"
+                      : "cursor-pointer border-2 border-purple-500/50 hover:brightness-110"
                   } ${cell.revealed ? "animate-scratch-reveal" : ""}`}
                 >
-                  {cell.revealed ? cell.emoji : "?"}
+                  {cell.revealed ? cell.emoji : (
+                    <div className="scratch-cover absolute inset-0 flex items-center justify-center rounded-xl text-3xl">?</div>
+                  )}
                 </button>
               );
             })}
@@ -1545,8 +1805,8 @@ export default function MemoryQuestPage() {
           {scratchFinished && (
             <div className="animate-prize-pop flex flex-col items-center gap-3">
               {scratchPrize && (scratchPrize.coins > 0 || scratchPrize.energy > 0) ? (
-                <div className="animate-glow-gold rounded-2xl border-2 border-gold-400 bg-gold-100 px-6 py-4 text-center shadow-lg">
-                  <p className="text-lg font-bold text-gold-600">You Won!</p>
+                <div className="animate-glow-gold reward-frame rounded-2xl px-6 py-4 text-center shadow-lg">
+                  <p className="text-lg font-bold text-yellow-300 text-glow-gold">You Won!</p>
                   <div className="mt-1 flex items-center justify-center gap-3">
                     {scratchPrize.coins > 0 && (
                       <span className="font-bold">🪙 +{scratchPrize.coins}</span>
@@ -1557,8 +1817,8 @@ export default function MemoryQuestPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border-2 border-red-400 bg-red-100 px-6 py-4 text-center shadow-lg">
-                  <p className="text-lg font-bold">💀 No luck this time!</p>
+                <div className="rounded-2xl border-2 border-red-500/50 bg-red-500/10 px-6 py-4 text-center shadow-lg">
+                  <p className="text-lg font-bold text-red-400">💀 No luck this time!</p>
                 </div>
               )}
               <button
@@ -1579,8 +1839,8 @@ export default function MemoryQuestPage() {
       {/* ── SHOP PHASE ────────────────────────────── */}
       {phase === "shop" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-2xl font-extrabold">🏪 Shop</h2>
-          <p className="text-sm text-gray-500">Spend coins on mini games for a chance to win big!</p>
+          <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">🏪 Shop</h2>
+          <p className="text-sm text-gray-400">Spend coins on mini games for a chance to win big!</p>
 
           <div className="flex w-full max-w-sm flex-col gap-4">
             {SHOP_ITEMS.map((item) => {
@@ -1588,17 +1848,17 @@ export default function MemoryQuestPage() {
               return (
                 <div
                   key={item.id}
-                  className={`rounded-2xl bg-white/80 p-4 shadow-lg backdrop-blur-sm transition ${
+                  className={`rounded-2xl panel-dark p-4 shadow-lg transition ${
                     affordable ? "animate-shop-item-hover" : "opacity-60"
                   }`}
                 >
                   <div className="mb-2 flex items-center gap-3">
                     <span className="text-3xl">{item.emoji}</span>
                     <div className="flex-1">
-                      <p className="font-bold text-gray-800">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.description}</p>
+                      <p className="font-bold text-white">{item.name}</p>
+                      <p className="text-xs text-gray-400">{item.description}</p>
                     </div>
-                    <span className="rounded-full bg-gold-100 px-3 py-1 text-sm font-bold text-gold-600">
+                    <span className="rounded-full coin-badge px-3 py-1 text-sm font-bold text-yellow-300">
                       🪙 {item.cost}
                     </span>
                   </div>
@@ -1608,7 +1868,7 @@ export default function MemoryQuestPage() {
                     className={`w-full rounded-xl py-2.5 font-bold text-white transition ${
                       affordable
                         ? "gradient-btn animate-shimmer"
-                        : "cursor-not-allowed bg-gray-300"
+                        : "cursor-not-allowed bg-gray-700 text-gray-400"
                     }`}
                   >
                     {affordable ? "Play" : "Not enough coins"}
@@ -1620,7 +1880,7 @@ export default function MemoryQuestPage() {
 
           <button
             onClick={handleShopBack}
-            className="rounded-xl bg-gray-100 px-6 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200"
+            className="rounded-xl bg-white/10 border border-white/20 px-6 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/20"
           >
             Back to Menu
           </button>
@@ -1629,282 +1889,42 @@ export default function MemoryQuestPage() {
 
       {/* ── COIN FLIP PHASE ──────────────────────── */}
       {phase === "shop-coin-flip" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-2xl font-extrabold">🪙 Coin Flip</h2>
-          <p className="text-sm text-gray-500">Pick a side — 50/50 shot!</p>
-
-          {/* Coin display */}
-          <div
-            className={`flex h-32 w-32 items-center justify-center rounded-full text-6xl ${
-              coinFlipAnimating ? "animate-coin-spin" : ""
-            } ${
-              coinFlipResult
-                ? coinFlipResult.won
-                  ? "bg-gold-100 shadow-lg"
-                  : "bg-gray-200"
-                : "bg-gradient-to-br from-gold-300 to-gold-500 shadow-lg"
-            }`}
-            style={{ perspective: "600px" }}
-          >
-            {coinFlipResult
-              ? coinFlipResult.outcome === "heads" ? "👑" : "🛡️"
-              : coinFlipChoice
-                ? coinFlipChoice === "heads" ? "👑" : "🛡️"
-                : "🪙"}
-          </div>
-
-          {/* Choice buttons or result */}
-          {!coinFlipResult && !coinFlipAnimating && (
-            <div className="flex gap-4">
-              <button
-                onClick={() => handleCoinFlipPick("heads")}
-                className="rounded-2xl bg-gold-100 px-8 py-4 text-center transition hover:bg-gold-300"
-              >
-                <span className="block text-3xl">👑</span>
-                <span className="mt-1 block text-sm font-bold text-gold-600">Heads</span>
-              </button>
-              <button
-                onClick={() => handleCoinFlipPick("tails")}
-                className="rounded-2xl bg-purple-100 px-8 py-4 text-center transition hover:bg-purple-200"
-              >
-                <span className="block text-3xl">🛡️</span>
-                <span className="mt-1 block text-sm font-bold text-purple-700">Tails</span>
-              </button>
-            </div>
-          )}
-
-          {coinFlipAnimating && (
-            <p className="text-lg font-bold text-gray-500">Flipping...</p>
-          )}
-
-          {coinFlipResult && (
-            <div className="animate-reward-reveal flex flex-col items-center gap-3">
-              <div
-                className={`rounded-2xl px-6 py-4 text-center shadow-lg ${
-                  coinFlipResult.won
-                    ? "animate-glow-gold border-2 border-gold-400 bg-gold-100"
-                    : "border-2 border-red-400 bg-red-100"
-                }`}
-              >
-                <p className="text-lg font-bold">
-                  {coinFlipResult.won ? "You Won!" : "No luck!"}
-                </p>
-                <p className="text-sm text-gray-600">
-                  It was {coinFlipResult.outcome === "heads" ? "👑 Heads" : "🛡️ Tails"}
-                </p>
-                {coinFlipResult.won && (
-                  <div className="mt-2 flex items-center justify-center gap-3">
-                    {coinFlipResult.reward.coins > 0 && (
-                      <span className="font-bold">🪙 +{coinFlipResult.reward.coins}</span>
-                    )}
-                    {coinFlipResult.reward.energy > 0 && (
-                      <span className="font-bold">⚡ +{coinFlipResult.reward.energy}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleShopGameContinue}
-                className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
-              >
-                Continue
-              </button>
-            </div>
-          )}
-        </div>
+        <CoinFlipGame
+          coinFlipChoice={coinFlipChoice}
+          coinFlipResult={coinFlipResult}
+          coinFlipAnimating={coinFlipAnimating}
+          onPick={handleCoinFlipPick}
+          onContinue={handleShopGameContinue}
+        />
       )}
 
       {/* ── TREASURE CHEST PHASE ─────────────────── */}
       {phase === "shop-treasure" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-2xl font-extrabold">📦 Treasure Chest</h2>
-          <p className="text-sm text-gray-500">Pick a chest — every one has a prize!</p>
-
-          <div className="flex gap-4">
-            {treasureChests.map((chest, i) => {
-              const isSelected = treasureOpenedIndex === i;
-              const isOther = treasureOpenedIndex !== null && treasureOpenedIndex !== i;
-
-              return (
-                <button
-                  key={chest.id}
-                  onClick={() => handleTreasureChestPick(i)}
-                  disabled={treasureOpenedIndex !== null}
-                  className={`flex h-28 w-24 flex-col items-center justify-center rounded-2xl text-center transition ${
-                    isSelected
-                      ? "animate-chest-open shadow-xl"
-                      : isOther
-                        ? "animate-chest-fade"
-                        : "animate-chest-wiggle cursor-pointer hover:scale-105"
-                  } ${
-                    isSelected
-                      ? "border-2 bg-white"
-                      : "bg-gradient-to-b from-purple-200 to-purple-400 shadow-lg"
-                  }`}
-                  style={isSelected ? { borderColor: CHEST_RARITY_COLORS[chest.rarity] } : undefined}
-                >
-                  {isSelected ? (
-                    <>
-                      <span className="text-3xl">{chest.reward.triggerEvent ? "⭐" : chest.reward.coins > 0 ? "🪙" : "⚡"}</span>
-                      <span
-                        className="mt-1 text-[10px] font-bold"
-                        style={{ color: CHEST_RARITY_COLORS[chest.rarity] }}
-                      >
-                        {CHEST_RARITY_LABELS[chest.rarity]}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-4xl">📦</span>
-                      <span className="mt-1 text-xs font-bold text-white">#{i + 1}</span>
-                    </>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Opened chest result */}
-          {treasureOpenedIndex !== null && treasureChests[treasureOpenedIndex] && (
-            <div className="animate-reward-reveal flex flex-col items-center gap-3">
-              <div
-                className="rounded-2xl border-2 px-6 py-4 text-center shadow-lg"
-                style={{ borderColor: CHEST_RARITY_COLORS[treasureChests[treasureOpenedIndex].rarity], backgroundColor: `${CHEST_RARITY_COLORS[treasureChests[treasureOpenedIndex].rarity]}15` }}
-              >
-                <p className="text-lg font-bold" style={{ color: CHEST_RARITY_COLORS[treasureChests[treasureOpenedIndex].rarity] }}>
-                  {CHEST_RARITY_LABELS[treasureChests[treasureOpenedIndex].rarity]} Chest!
-                </p>
-                <div className="mt-2 flex items-center justify-center gap-3">
-                  {treasureChests[treasureOpenedIndex].reward.coins > 0 && (
-                    <span className="font-bold">🪙 +{treasureChests[treasureOpenedIndex].reward.coins}</span>
-                  )}
-                  {treasureChests[treasureOpenedIndex].reward.energy > 0 && (
-                    <span className="font-bold">⚡ +{treasureChests[treasureOpenedIndex].reward.energy}</span>
-                  )}
-                  {treasureChests[treasureOpenedIndex].reward.triggerEvent && (
-                    <span className="font-bold">🌟 Event!</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={handleShopGameContinue}
-                className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
-              >
-                Continue
-              </button>
-            </div>
-          )}
-        </div>
+        <TreasureChestGame
+          chests={treasureChests}
+          openedIndex={treasureOpenedIndex}
+          onPick={handleTreasureChestPick}
+          onContinue={handleShopGameContinue}
+        />
       )}
 
       {/* ── SLOT MACHINE PHASE ───────────────────── */}
       {phase === "shop-slots" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-2xl font-extrabold">🎰 Slot Machine</h2>
-          <p className="text-sm text-gray-500">Match symbols to win — triple 7s for the jackpot!</p>
-
-          {/* Reels */}
-          <div
-            className={`flex items-center gap-3 rounded-2xl bg-gray-900 px-6 py-5 shadow-xl ${
-              slotResult?.isJackpot ? "animate-slot-jackpot" : ""
-            }`}
-          >
-            {[0, 1, 2].map((i) => {
-              const stopped = slotReelsStopped[i];
-              const symbol = slotResult?.reels[i];
-              const isMatch = slotResult && slotResult.matchCount >= 2 && symbol === slotResult.reels[0];
-
-              return (
-                <div
-                  key={i}
-                  className={`flex h-20 w-20 items-center justify-center rounded-xl text-4xl transition-all ${
-                    stopped && symbol
-                      ? isMatch
-                        ? "bg-gold-100 shadow-md"
-                        : "bg-white"
-                      : slotSpinning
-                        ? "animate-reel-blur bg-white/80"
-                        : "bg-white"
-                  }`}
-                >
-                  {stopped && symbol
-                    ? SLOT_SYMBOL_EMOJIS[symbol]
-                    : slotSpinning
-                      ? "?"
-                      : "🎰"}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Pull or Result */}
-          {!slotResult && !slotSpinning && (
-            <button
-              onClick={handleSlotPull}
-              className="gradient-btn animate-gradient w-full max-w-xs rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
-            >
-              Pull!
-            </button>
-          )}
-
-          {slotSpinning && (
-            <p className="text-lg font-bold text-gray-500">Spinning...</p>
-          )}
-
-          {slotResult && (
-            <div className="animate-reward-reveal flex flex-col items-center gap-3">
-              <div
-                className={`rounded-2xl px-6 py-4 text-center shadow-lg ${
-                  slotResult.isJackpot
-                    ? "animate-glow-gold border-2 border-gold-400 bg-gold-100"
-                    : slotResult.reward.coins === 0 && slotResult.reward.energy === 0
-                      ? "border-2 border-red-400 bg-red-100"
-                      : slotResult.matchCount === 3
-                        ? "border-2 border-purple-400 bg-purple-100"
-                        : "border-2 border-blue-300 bg-blue-50"
-                }`}
-              >
-                <p className="text-lg font-bold">
-                  {slotResult.isJackpot
-                    ? "🎉 JACKPOT!"
-                    : slotResult.reward.coins === 0 && slotResult.reward.energy === 0
-                      ? "💀 Bust!"
-                      : slotResult.matchCount === 3
-                        ? "Triple Match!"
-                        : slotResult.matchCount === 2
-                          ? "Double Match!"
-                          : "Consolation Prize"}
-                </p>
-                {(slotResult.reward.coins > 0 || slotResult.reward.energy > 0) && (
-                  <div className="mt-2 flex items-center justify-center gap-3">
-                    {slotResult.reward.coins > 0 && (
-                      <span className="font-bold">🪙 +{slotResult.reward.coins}</span>
-                    )}
-                    {slotResult.reward.energy > 0 && (
-                      <span className="font-bold">⚡ +{slotResult.reward.energy}</span>
-                    )}
-                    {slotResult.reward.triggerEvent && (
-                      <span className="font-bold">🌟 Event!</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleShopGameContinue}
-                className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
-              >
-                Continue
-              </button>
-            </div>
-          )}
-        </div>
+        <SlotMachineGame
+          slotResult={slotResult}
+          slotSpinning={slotSpinning}
+          slotReelsStopped={slotReelsStopped}
+          onPull={handleSlotPull}
+          onContinue={handleShopGameContinue}
+        />
       )}
 
       {/* ── QUIT SUMMARY PHASE ─────────────────────── */}
       {phase === "quit-summary" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-4 py-8 text-center">
+        <div className="animate-elastic-bounce flex flex-col items-center gap-4 py-8 text-center">
+          <div className="reward-frame rounded-3xl mx-4 px-8 py-8 flex flex-col items-center gap-4">
           <p className="text-5xl">🧠</p>
-          <h2 className="gradient-text text-3xl font-extrabold">Session Summary</h2>
+          <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">Session Summary</h2>
           <div className="grid w-full max-w-sm grid-cols-2 gap-3">
             <StatCard label="Matches" value={sessionScore} highlight />
             <StatCard label="Rounds" value={round} />
@@ -1912,14 +1932,104 @@ export default function MemoryQuestPage() {
             <StatCard label="Best Combo" value={`${stats.highestCombo}x`} />
           </div>
           {sessionScore > 0 && sessionScore >= highScore && (
-            <p className="font-bold text-gold-500">New High Score! 🏆</p>
+            <p className="font-bold text-yellow-300 text-glow-gold">New High Score! 🏆</p>
           )}
           <button
             onClick={backToMenu}
-            className="gradient-btn mt-4 w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+            className="gradient-btn-gold mt-4 w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-purple-900 shadow-lg"
           >
             Back to Menu
           </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── ACHIEVEMENTS PHASE ─────────────────────── */}
+      {phase === "achievements" && (
+        <AchievementsPage
+          stats={stats}
+          achievedMilestones={achievedMilestones}
+        />
+      )}
+
+      {/* ── Floating Mini-Game Buttons (during gameplay) ── */}
+      {phase === "playing" && !miniGameOverlay && (
+        <FloatingMiniGameButtons
+          coins={coins}
+          onOpenMiniGame={handleOverlayBuyGame}
+        />
+      )}
+
+      {/* ── Mini-Game Overlay (during gameplay) ──────── */}
+      {miniGameOverlay && (
+        <MiniGameOverlay onClose={handleOverlayContinue}>
+          {miniGameOverlay === "coin-flip" && (
+            <CoinFlipGame
+              coinFlipChoice={coinFlipChoice}
+              coinFlipResult={coinFlipResult}
+              coinFlipAnimating={coinFlipAnimating}
+              onPick={handleCoinFlipPick}
+              onContinue={handleOverlayContinue}
+            />
+          )}
+          {miniGameOverlay === "treasure-chest" && (
+            <TreasureChestGame
+              chests={treasureChests}
+              openedIndex={treasureOpenedIndex}
+              onPick={handleTreasureChestPick}
+              onContinue={handleOverlayContinue}
+            />
+          )}
+          {miniGameOverlay === "slot-machine" && (
+            <SlotMachineGame
+              slotResult={slotResult}
+              slotSpinning={slotSpinning}
+              slotReelsStopped={slotReelsStopped}
+              onPull={handleSlotPull}
+              onContinue={handleOverlayContinue}
+            />
+          )}
+        </MiniGameOverlay>
+      )}
+
+      {/* ── Bottom Tab Bar ───────────────────────────── */}
+      <BottomTabBar
+        activeTab={activeTab}
+        gameInProgress={gameInProgress || savedGamePhase.current !== null}
+        onNavigate={handleTabNavigate}
+      />
+
+      {/* ── Second Wind Overlay ─────────────────────── */}
+      {showSecondWind && (
+        <div className="animate-second-wind pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-green-500/30 backdrop-blur-sm">
+          <div className="text-center">
+            <p className="text-5xl font-black text-white drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]">
+              ⚡ SECOND WIND ⚡
+            </p>
+            <p className="mt-2 text-2xl font-bold text-green-300 drop-shadow-lg">
+              Energy fully recharged!
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Safety Net Toast ──────────────────────────── */}
+      {safetyNetGift !== null && (
+        <div className="pointer-events-none fixed bottom-20 left-1/2 z-50 -translate-x-1/2">
+          <div className="animate-safety-net rounded-2xl border-2 border-purple-400 bg-navy-800/95 backdrop-blur-md px-5 py-3 shadow-xl text-center">
+            <p className="text-sm font-bold text-purple-300">🔬 Lab Emergency Recharge</p>
+            <p className="text-lg font-black text-green-400">+{safetyNetGift} ⚡</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Streak Toast ──────────────────────────────── */}
+      {streakToast !== null && (
+        <div className="pointer-events-none fixed bottom-20 left-1/2 z-50 -translate-x-1/2">
+          <div className="animate-streak-bonus rounded-2xl border-2 border-yellow-400 bg-navy-800/95 backdrop-blur-md px-5 py-3 shadow-xl text-center">
+            <p className="text-sm font-bold text-yellow-300">🔥 Streak Bonus!</p>
+            <p className="text-lg font-black text-green-400">+{streakToast} ⚡</p>
+          </div>
         </div>
       )}
 
@@ -1928,10 +2038,10 @@ export default function MemoryQuestPage() {
         {milestoneToasts.map((t) => (
           <div
             key={t.key}
-            className="animate-milestone pointer-events-auto rounded-2xl border-2 border-gold-400 bg-white px-4 py-3 shadow-xl"
+            className="animate-milestone pointer-events-auto rounded-2xl border-2 border-gold-premium bg-navy-800/95 backdrop-blur-md px-4 py-3 shadow-xl"
           >
-            <p className="text-sm font-bold text-purple-700">🏆 {t.milestone.description}</p>
-            <p className="text-xs text-gold-600">
+            <p className="text-sm font-bold text-purple-300">🏆 {t.milestone.description}</p>
+            <p className="text-xs text-yellow-300 text-glow-gold">
               +{t.milestone.reward.coins} coins, +{t.milestone.reward.energy} energy
             </p>
           </div>
@@ -1955,11 +2065,11 @@ function StatCard({
   return (
     <div
       className={`rounded-xl p-3 text-center shadow-sm ${
-        highlight ? "bg-purple-100" : "bg-white/70 backdrop-blur-sm"
+        highlight ? "bg-purple-500/20 border border-purple-500/30" : "panel-dark"
       }`}
     >
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-lg font-bold ${highlight ? "text-purple-700" : "text-gray-800"}`}>
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className={`text-lg font-bold text-number-bold ${highlight ? "text-purple-300" : "text-white"}`}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
     </div>
