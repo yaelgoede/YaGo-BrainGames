@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import GameShell from "@/components/GameShell";
 import DifficultySelector from "@/components/DifficultySelector";
 import { generateRound, type PatternRound } from "@/lib/games/pattern-recognition";
@@ -20,6 +20,13 @@ export default function PatternRecognitionPage() {
   const [phase, setPhase] = useState<Phase>("idle");
 
   const offset = DIFFICULTY_OFFSET[difficulty];
+  const feedbackTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeout.current) clearTimeout(feedbackTimeout.current);
+    };
+  }, []);
 
   const start = useCallback(() => {
     setRound(generateRound(1 + offset));
@@ -30,6 +37,7 @@ export default function PatternRecognitionPage() {
   }, [offset]);
 
   const restart = useCallback(() => {
+    if (feedbackTimeout.current) clearTimeout(feedbackTimeout.current);
     setPhase("idle");
     setScore(0);
     setStreak(0);
@@ -45,14 +53,16 @@ export default function PatternRecognitionPage() {
       setStreak(newStreak);
       setScore((s) => s + 1);
       setFeedback("correct");
-      setTimeout(() => {
+      if (feedbackTimeout.current) clearTimeout(feedbackTimeout.current);
+      feedbackTimeout.current = setTimeout(() => {
         setRound(generateRound(newStreak + offset));
         setFeedback(null);
       }, 600);
     } else {
       playSound("wrong");
       setFeedback("wrong");
-      setTimeout(() => {
+      if (feedbackTimeout.current) clearTimeout(feedbackTimeout.current);
+      feedbackTimeout.current = setTimeout(() => {
         setStreak(0);
         setRound(generateRound(1 + offset));
         setFeedback(null);

@@ -1,4 +1,5 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { randInt, pickRandom } from "@/lib/utils";
 
 export type QuestionType =
   | "bit-value"
@@ -12,14 +13,6 @@ export interface BitBasicsRound {
   correctAnswer: number;
   questionType: QuestionType;
   highlightBit?: number; // for power-of-2 visual
-}
-
-function randInt(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 const EASY_GENERATORS: (() => BitBasicsRound)[] = [

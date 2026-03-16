@@ -1,4 +1,8 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { randInt } from "@/lib/utils";
+import { numberToBits, bitsToNumber } from "@/lib/bit-utils";
+
+export { bitsToNumber };
 
 export type ConvertMode = "bin-to-dec" | "dec-to-bin" | "bin-to-hex" | "hex-to-bin";
 
@@ -9,26 +13,6 @@ export interface ConvertRound {
   correctBits: number[];
   correctAnswer: string; // decimal or hex string for typed answers
   bitWidth: number;
-}
-
-function randInt(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function numberToBits(n: number, width: number): number[] {
-  const bits: number[] = [];
-  for (let i = width - 1; i >= 0; i--) {
-    bits.push((n >> i) & 1);
-  }
-  return bits;
-}
-
-export function bitsToNumber(bits: number[]): number {
-  let n = 0;
-  for (let i = 0; i < bits.length; i++) {
-    n = (n << 1) | bits[i];
-  }
-  return n;
 }
 
 function getModesForDifficulty(difficulty: Difficulty): ConvertMode[] {

@@ -13,6 +13,19 @@ const MEMORIZE_MS = 1500;
 
 type Phase = "idle" | "memorize" | "input" | "correct" | "wrong" | "over";
 
+function tileClass(state: string) {
+  switch (state) {
+    case "shown":
+      return "bg-blue-500 border-blue-400";
+    case "selected":
+      return "bg-blue-400/60 border-blue-300";
+    case "revealed":
+      return "bg-blue-500/40 border-blue-300";
+    default:
+      return "bg-gray-100 border-gray-200 hover:bg-gray-200";
+  }
+}
+
 export default function VisualMemoryPage() {
   const [difficulty, setDifficulty] = useState<Difficulty>(() => getSavedDifficulty(GAME_ID));
   const [grid, setGrid] = useState<Grid>(() => generateGrid(1));
@@ -121,19 +134,6 @@ export default function VisualMemoryPage() {
     if ((phase === "correct" || phase === "over" || phase === "wrong") && activeTilesSet.has(idx)) return "revealed";
     if (selectedSet.has(idx)) return "selected";
     return "blank";
-  };
-
-  const tileClass = (state: string) => {
-    switch (state) {
-      case "shown":
-        return "bg-blue-500 border-blue-400";
-      case "selected":
-        return "bg-blue-400/60 border-blue-300";
-      case "revealed":
-        return "bg-blue-500/40 border-blue-300";
-      default:
-        return "bg-gray-100 border-gray-200 hover:bg-gray-200";
-    }
   };
 
   // Keyboard: arrow keys to navigate, Enter/Space to toggle

@@ -7,3 +7,13 @@ export function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
+
+/** Random integer in [min, max] (inclusive). */
+export function randInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/** Pick a random element from a non-empty array. */
+export function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}

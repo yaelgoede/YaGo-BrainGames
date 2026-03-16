@@ -1,4 +1,7 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { numberToBits, bitsToNumber } from "@/lib/bit-utils";
+
+export { bitsToNumber };
 
 export type AsciiMode = "decode" | "encode" | "word";
 
@@ -11,22 +14,6 @@ export interface AsciiRound {
   word?: string;
   wordIndex?: number;
   wordLength?: number;
-}
-
-function numberToBits(n: number): number[] {
-  const bits: number[] = [];
-  for (let i = 7; i >= 0; i--) {
-    bits.push((n >> i) & 1);
-  }
-  return bits;
-}
-
-export function bitsToNumber(bits: number[]): number {
-  let n = 0;
-  for (let i = 0; i < 8; i++) {
-    n = (n << 1) | bits[i];
-  }
-  return n;
 }
 
 const UPPERCASE = Array.from({ length: 26 }, (_, i) => 65 + i); // A-Z

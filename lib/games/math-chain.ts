@@ -1,4 +1,4 @@
-import { shuffle } from "@/lib/utils";
+import { shuffle, randInt } from "@/lib/utils";
 import type { Difficulty } from "@/lib/difficulty";
 
 export interface Operation {
@@ -27,10 +27,6 @@ export function getMathChainConfig(difficulty: Difficulty): MathChainConfig {
     case "hard":
       return { maxNumber: 100, includeMultiply: true, timePerRound: 15 };
   }
-}
-
-function randInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function makeAddOp(n: number): Operation {

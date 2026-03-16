@@ -1,4 +1,8 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { randInt } from "@/lib/utils";
+import { numberToBits, bitsToNumber } from "@/lib/bit-utils";
+
+export { bitsToNumber };
 
 export type MaskOp = "AND" | "OR" | "XOR";
 export type TaskType = "set" | "clear" | "toggle" | "check";
@@ -12,26 +16,6 @@ export interface MaskRound {
   correctOp: MaskOp;
   correctResult: number[];
   requiresResultCheck: boolean;
-}
-
-function randInt(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function numberToBits(n: number): number[] {
-  const bits: number[] = [];
-  for (let i = 7; i >= 0; i--) {
-    bits.push((n >> i) & 1);
-  }
-  return bits;
-}
-
-export function bitsToNumber(bits: number[]): number {
-  let n = 0;
-  for (let i = 0; i < bits.length; i++) {
-    n = (n << 1) | bits[i];
-  }
-  return n;
 }
 
 export function applyMask(input: number[], mask: number[], op: MaskOp): number[] {

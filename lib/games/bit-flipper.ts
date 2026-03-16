@@ -1,4 +1,7 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { numberToBits, bitsToNumber } from "@/lib/bit-utils";
+
+export { numberToBits, bitsToNumber };
 
 export type ChallengeMode = "binary" | "decimal" | "ascii";
 
@@ -13,22 +16,6 @@ export function getModeForDifficulty(difficulty: Difficulty): ChallengeMode {
   if (difficulty === "easy") return "binary";
   if (difficulty === "medium") return "decimal";
   return "ascii";
-}
-
-export function numberToBits(n: number): number[] {
-  const bits: number[] = [];
-  for (let i = 7; i >= 0; i--) {
-    bits.push((n >> i) & 1);
-  }
-  return bits;
-}
-
-export function bitsToNumber(bits: number[]): number {
-  let n = 0;
-  for (let i = 0; i < 8; i++) {
-    n = (n << 1) | bits[i];
-  }
-  return n;
 }
 
 export function checkMatch(playerBits: number[], targetBits: number[]): boolean {

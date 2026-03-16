@@ -1,4 +1,5 @@
 import { type Difficulty } from "@/lib/difficulty";
+import { pickRandom } from "@/lib/utils";
 
 export type Opcode = "LOAD" | "STORE" | "ADD" | "SUB" | "JUMP" | "JZ" | "HALT";
 
@@ -81,9 +82,6 @@ export function describeInstruction(inst: InstructionFormat): string {
   }
 }
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 function generateDecodeOptions(correctOpcode: Opcode): Opcode[] {
   const options = new Set<Opcode>([correctOpcode]);
