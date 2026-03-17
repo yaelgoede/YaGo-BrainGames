@@ -34,6 +34,7 @@ export interface PlayerStats {
   highestCombo: number;
   totalCoinsEarned: number;
   highestRound: number;
+  totalPrestiges: number;
 }
 
 export interface LabUpgrade {
@@ -160,6 +161,7 @@ const DEFAULT_STATS: PlayerStats = {
   highestCombo: 0,
   totalCoinsEarned: 0,
   highestRound: 0,
+  totalPrestiges: 0,
 };
 
 export function loadStats(): PlayerStats {
@@ -224,6 +226,11 @@ export const MILESTONES: Milestone[] = [
   ms("coins-10000", "totalCoinsEarned", 10000, 1200, 15, "10,000 Coins Earned"),
   ms("coins-50000", "totalCoinsEarned", 50000, 5000, 20, "50,000 Coins Earned"),
   ms("coins-100000", "totalCoinsEarned", 100000, 10000, 30, "100,000 Coins Earned"),
+  // Prestige
+  ms("prestige-1", "totalPrestiges", 1, 500, 10, "First Prestige"),
+  ms("prestige-3", "totalPrestiges", 3, 1500, 15, "3 Prestiges"),
+  ms("prestige-5", "totalPrestiges", 5, 3000, 20, "5 Prestiges"),
+  ms("prestige-10", "totalPrestiges", 10, 8000, 30, "10 Prestiges"),
 ];
 
 export function loadMilestones(): string[] {
@@ -245,7 +252,7 @@ export function checkNewMilestones(
 // ── Milestone Helpers (for Achievements page & HUD) ───
 
 const STAT_KEYS: (keyof PlayerStats)[] = [
-  "totalMatches", "totalBoardsCleared", "highestCombo", "highestRound", "totalCoinsEarned",
+  "totalMatches", "totalBoardsCleared", "highestCombo", "highestRound", "totalCoinsEarned", "totalPrestiges",
 ];
 
 export function getMilestonesByCategory(): Record<keyof PlayerStats, Milestone[]> {
@@ -301,7 +308,11 @@ export function getClosestMilestone(
 
 // ── Reward Calculations ────────────────────────────────
 
-export function calculateMatchReward(combo: number, round: number = 1): {
+export function getPrestigeMultiplier(starRank: number): number {
+  return 1 + starRank * 0.10;
+}
+
+export function calculateMatchReward(combo: number, round: number = 1, starRank: number = 0): {
   coins: number;
   energyRefund: number;
 } {
@@ -309,15 +320,17 @@ export function calculateMatchReward(combo: number, round: number = 1): {
   const baseRefund = ENERGY_REFUND_PER_MATCH + COMBO_ENERGY_BONUS[bonusIdx];
   // Late-game scaling: +1 energy per match starting at round 5
   const lateGameBonus = round >= 5 ? Math.floor((round - 4) / 2) + 1 : 0;
+  const baseCoins = BASE_COINS_PER_MATCH * Math.max(1, combo);
   return {
-    coins: BASE_COINS_PER_MATCH * Math.max(1, combo),
+    coins: Math.floor(baseCoins * getPrestigeMultiplier(starRank)),
     energyRefund: baseRefund + lateGameBonus + MATCH_PAIR_ENERGY_BONUS,
   };
 }
 
-export function calculateBoardClearReward(round: number): { coins: number; energy: number } {
+export function calculateBoardClearReward(round: number, starRank: number = 0): { coins: number; energy: number } {
+  const baseCoins = BOARD_CLEAR_BONUS + round * 25;
   return {
-    coins: BOARD_CLEAR_BONUS + round * 25,
+    coins: Math.floor(baseCoins * getPrestigeMultiplier(starRank)),
     energy: Math.min(8, 3 + Math.floor(round / 2)),
   };
 }
@@ -388,4 +401,14 @@ export function loadHighScore(): number {
 export function saveHighScore(score: number): void {
   const current = loadHighScore();
   if (score > current) store("mq-highscore", score);
+}
+
+// ── Star Rank (Prestige) ─────────────────────────────
+
+export function loadStarRank(): number {
+  return safe<number>("mq-star-rank", 0);
+}
+
+export function saveStarRank(rank: number): void {
+  store("mq-star-rank", rank);
 }

@@ -20,16 +20,32 @@ export interface BoardConfig {
 
 // ── Board Progression ──────────────────────────────────
 
+// Alternating easy/hard pattern — odd rounds (after 1) are breathers
 export const BOARD_PROGRESSION: BoardConfig[] = [
-  { rows: 3, cols: 4, matchSize: 2 }, // round 1: 12 cards, 6 pairs
-  { rows: 4, cols: 4, matchSize: 2 }, // round 2: 16 cards, 8 pairs
-  { rows: 4, cols: 5, matchSize: 2 }, // round 3: 20 cards, 10 pairs
-  { rows: 4, cols: 6, matchSize: 2 }, // round 4: 24 cards, 12 pairs
-  { rows: 4, cols: 6, matchSize: 3 }, // round 5: 24 cards, 8 triples
-  { rows: 5, cols: 6, matchSize: 3 }, // round 6: 30 cards, 10 triples
-  { rows: 6, cols: 6, matchSize: 3 }, // round 7: 36 cards, 12 triples
-  { rows: 6, cols: 6, matchSize: 4 }, // round 8+: 36 cards, 9 quads
+  // Wave 1: intro
+  { rows: 3, cols: 4, matchSize: 2 }, // round 1:  12 cards, 6 pairs   — Easy
+  { rows: 4, cols: 4, matchSize: 2 }, // round 2:  16 cards, 8 pairs   — Medium
+  { rows: 3, cols: 4, matchSize: 2 }, // round 3:  12 cards, 6 pairs   — Breather
+  { rows: 4, cols: 5, matchSize: 2 }, // round 4:  20 cards, 10 pairs  — Medium
+  { rows: 4, cols: 4, matchSize: 2 }, // round 5:  16 cards, 8 pairs   — Breather
+  { rows: 4, cols: 6, matchSize: 2 }, // round 6:  24 cards, 12 pairs  — Hard
+  // Wave 2: triples intro
+  { rows: 4, cols: 4, matchSize: 2 }, // round 7:  16 cards, 8 pairs   — Breather
+  { rows: 4, cols: 6, matchSize: 3 }, // round 8:  24 cards, 8 triples — Hard
+  { rows: 3, cols: 4, matchSize: 2 }, // round 9:  12 cards, 6 pairs   — Breather
+  { rows: 5, cols: 6, matchSize: 3 }, // round 10: 30 cards, 10 trips  — Hard
+  { rows: 4, cols: 6, matchSize: 3 }, // round 11: 24 cards, 8 triples — Breather
+  { rows: 6, cols: 6, matchSize: 3 }, // round 12: 36 cards, 12 trips  — Very Hard
+  // Wave 3: quads + endgame cycle (repeats from here)
+  { rows: 4, cols: 6, matchSize: 2 }, // round 13: 24 cards, 12 pairs  — Breather
+  { rows: 6, cols: 6, matchSize: 4 }, // round 14: 36 cards, 9 quads   — Extreme
+  { rows: 4, cols: 4, matchSize: 2 }, // round 15: 16 cards, 8 pairs   — Breather
+  { rows: 6, cols: 6, matchSize: 4 }, // round 16: 36 cards, 9 quads   — Extreme
 ];
+
+// After round 16, cycle through the last 4 entries (rounds 13-16)
+const CYCLE_START = 12; // index of the repeating cycle start
+const CYCLE_LENGTH = 4;
 
 // ── Emoji Pools ────────────────────────────────────────
 
@@ -40,8 +56,13 @@ const TIER_3 = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚫", "
 // ── Functions ──────────────────────────────────────────
 
 export function getBoardConfig(round: number): BoardConfig {
-  const idx = Math.min(round - 1, BOARD_PROGRESSION.length - 1);
-  return BOARD_PROGRESSION[Math.max(0, idx)];
+  const idx = round - 1;
+  if (idx < BOARD_PROGRESSION.length) {
+    return BOARD_PROGRESSION[Math.max(0, idx)];
+  }
+  // After round 16, cycle through the last 4 configs (easy-hard-easy-hard)
+  const cycleIdx = CYCLE_START + ((idx - CYCLE_START) % CYCLE_LENGTH);
+  return BOARD_PROGRESSION[cycleIdx];
 }
 
 export function getMatchSize(round: number): number {
@@ -50,9 +71,9 @@ export function getMatchSize(round: number): number {
 
 export function selectEmojis(count: number, round: number): string[] {
   let pool: string[];
-  if (round <= 3) {
+  if (round <= 6) {
     pool = [...TIER_1];
-  } else if (round <= 6) {
+  } else if (round <= 12) {
     pool = [...TIER_1, ...TIER_2];
   } else {
     pool = [...TIER_1, ...TIER_2, ...TIER_3];

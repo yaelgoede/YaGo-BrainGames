@@ -39,6 +39,8 @@ import {
   saveSecondWindTimestamp,
   isSecondWindAvailable,
   getSecondWindCooldownRemaining,
+  loadStarRank,
+  saveStarRank,
 } from "@/lib/games/memory-quest-economy";
 import {
   type QuestCard,
@@ -129,10 +131,11 @@ export default function MemoryQuestPage() {
   const [coins, setCoins] = useState(0);
   const [labLevel, setLabLevel] = useState(0);
   const [stats, setStats] = useState<PlayerStats>({
-    totalMatches: 0, totalBoardsCleared: 0, highestCombo: 0, totalCoinsEarned: 0, highestRound: 0,
+    totalMatches: 0, totalBoardsCleared: 0, highestCombo: 0, totalCoinsEarned: 0, highestRound: 0, totalPrestiges: 0,
   });
   const [achievedMilestones, setAchievedMilestones] = useState<string[]>([]);
   const [highScore, setHighScore] = useState(0);
+  const [starRank, setStarRank] = useState(0);
   const [timeToNextEnergy, setTimeToNextEnergy] = useState(0);
 
   // Game state
@@ -224,6 +227,7 @@ export default function MemoryQuestPage() {
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
+    setStarRank(loadStarRank());
     setMuted(isMuted());
     setEventClears(loadEventClears());
 
@@ -546,7 +550,7 @@ export default function MemoryQuestPage() {
       setFlippedIndices([]);
 
       // Rewards
-      const reward = calculateMatchReward(newCombo, round);
+      const reward = calculateMatchReward(newCombo, round, starRank);
       const newCoins = coins + reward.coins;
       setCoins(newCoins);
       saveCoins(newCoins);
@@ -638,7 +642,7 @@ export default function MemoryQuestPage() {
 
       // Check board clear
       if (isAllMatched(newCards)) {
-        const clearReward = calculateBoardClearReward(round);
+        const clearReward = calculateBoardClearReward(round, starRank);
         const clearedCoins = newCoins + clearReward.coins;
         setCoins(clearedCoins);
         saveCoins(clearedCoins);
@@ -749,7 +753,7 @@ export default function MemoryQuestPage() {
         }, 2500);
       }
     },
-    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet],
+    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank],
   );
 
   // ── Quit (show summary, then back to idle) ──────────
@@ -762,6 +766,17 @@ export default function MemoryQuestPage() {
     setPhase("quit-summary");
   }, [sessionScore]);
 
+  // ── Skip Board (advance without rewards) ──────────
+
+  const skipBoard = useCallback(() => {
+    if (phase !== "playing") return;
+    if (flipBackTimeout.current) clearTimeout(flipBackTimeout.current);
+    setLocked(false);
+    setCombo(0);
+    playSound("click");
+    advanceToNextRound(round + 1);
+  }, [phase, round, advanceToNextRound]);
+
   const backToMenu = useCallback(() => {
     setPhase("idle");
     setEnergy(loadEnergy());
@@ -770,6 +785,8 @@ export default function MemoryQuestPage() {
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
+    setStarRank(loadStarRank());
+    setShowPrestigeConfirm(false);
     setShowLab(false);
     setLocked(false);
     setBoardClearing(false);
@@ -789,6 +806,30 @@ export default function MemoryQuestPage() {
       setTimedEvent(null);
     }
   }, []);
+
+  // ── Prestige (Star Rank) ──────────────────────────────
+
+  const [showPrestigeConfirm, setShowPrestigeConfirm] = useState(false);
+
+  const handlePrestige = useCallback(() => {
+    const newRank = starRank + 1;
+    setStarRank(newRank);
+    saveStarRank(newRank);
+    setStats((prev) => {
+      const updated = { ...prev, totalPrestiges: prev.totalPrestiges + 1 };
+      saveStats(updated);
+      // Check milestones
+      const newMs = checkNewMilestones(updated, achievedMilestones);
+      if (newMs.length > 0) {
+        const newAchieved = [...achievedMilestones, ...newMs.map((m) => m.id)];
+        setAchievedMilestones(newAchieved);
+        saveMilestones(newAchieved);
+      }
+      return updated;
+    });
+    setShowPrestigeConfirm(false);
+    playSound("levelUp");
+  }, [starRank, achievedMilestones]);
 
   // ── Lab Upgrade ──────────────────────────────────────
 
@@ -1396,6 +1437,43 @@ export default function MemoryQuestPage() {
             🏪 Shop
           </button>
 
+          {/* Star Rank & Prestige */}
+          {starRank > 0 && (
+            <p className="text-sm text-yellow-300 text-glow-gold">
+              {"⭐".repeat(Math.min(starRank, 10))} Star Rank {starRank} <span className="text-gray-400">(+{starRank * 10}% coins)</span>
+            </p>
+          )}
+          {stats.highestRound >= 14 && !showPrestigeConfirm && (
+            <button
+              onClick={() => setShowPrestigeConfirm(true)}
+              className="rounded-xl bg-yellow-500/20 border-2 border-yellow-500/30 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-500/30"
+            >
+              ⭐ Go Prestige
+            </button>
+          )}
+          {showPrestigeConfirm && (
+            <div className="animate-bounce-in w-full max-w-sm rounded-2xl panel-dark p-4 shadow-lg text-center">
+              <p className="mb-2 text-sm font-semibold text-yellow-300">Prestige to Star Rank {starRank + 1}?</p>
+              <p className="mb-3 text-xs text-gray-400">
+                Next game starts at Round 1. You keep all coins, upgrades & milestones. Coin rewards permanently boosted by +{(starRank + 1) * 10}%.
+              </p>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={handlePrestige}
+                  className="rounded-xl gradient-btn-gold px-4 py-2 text-sm font-bold text-purple-900"
+                >
+                  Prestige
+                </button>
+                <button
+                  onClick={() => setShowPrestigeConfirm(false)}
+                  className="rounded-xl bg-white/10 border border-white/20 px-4 py-2 text-sm font-medium text-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="grid w-full max-w-sm grid-cols-2 gap-3">
             <StatCard label="Total Matches" value={stats.totalMatches} />
@@ -1426,8 +1504,14 @@ export default function MemoryQuestPage() {
       {/* ── PLAYING PHASE ───────────────────────────── */}
       {phase === "playing" && (
         <div className="relative">
-          {/* Quit button */}
-          <div className="mb-2 flex justify-end">
+          {/* Quit & Skip buttons */}
+          <div className="mb-2 flex justify-end gap-2">
+            <button
+              onClick={skipBoard}
+              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
+            >
+              Skip
+            </button>
             <button
               onClick={quit}
               className="rounded-lg bg-white/10 border border-white/20 px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"

@@ -14,10 +14,11 @@ const CATEGORY_META: Record<keyof PlayerStats, { label: string; emoji: string }>
   highestCombo: { label: "Combos", emoji: "🔥" },
   highestRound: { label: "Rounds", emoji: "🏔️" },
   totalCoinsEarned: { label: "Lifetime Coins", emoji: "💰" },
+  totalPrestiges: { label: "Prestiges", emoji: "⭐" },
 };
 
 const CATEGORY_ORDER: (keyof PlayerStats)[] = [
-  "totalMatches", "totalBoardsCleared", "highestCombo", "highestRound", "totalCoinsEarned",
+  "totalMatches", "totalBoardsCleared", "highestCombo", "highestRound", "totalCoinsEarned", "totalPrestiges",
 ];
 
 export default function AchievementsPage({ stats, achievedMilestones }: AchievementsPageProps) {
