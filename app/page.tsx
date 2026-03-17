@@ -64,7 +64,6 @@ import {
   getEventTimeRemaining,
   shouldTriggerEvent,
   createNewEvent,
-  canStartNewEvent,
   endEvent,
   assignCollectibles,
   checkCollectibleEarned,
@@ -1042,12 +1041,14 @@ export default function MemoryQuestPage() {
       });
     }
     if (reward.triggerEvent) {
-      if (canStartNewEvent()) {
+      // Shop drops bypass cooldown — only check for active event
+      const active = loadTimedEvent();
+      if (!active || isEventExpired(active)) {
         const newEvent = createNewEvent();
         saveTimedEvent(newEvent);
         setTimedEvent(newEvent);
       } else {
-        // Fallback: give extra coins instead
+        // Already has an active event — give coins instead
         const bonus = 100;
         setCoins((prev) => {
           const n = prev + bonus;
@@ -1102,6 +1103,7 @@ export default function MemoryQuestPage() {
     playSound("click");
 
     const result = generateSlotResult();
+    setSlotResult(result);
 
     // Stop reels sequentially
     const stopReel = (i: number) => {
@@ -1117,7 +1119,6 @@ export default function MemoryQuestPage() {
         } else {
           // All reels stopped
           setSlotSpinning(false);
-          setSlotResult(result);
 
           if (result.isJackpot) {
             playSound("jackpot");
@@ -1144,6 +1145,38 @@ export default function MemoryQuestPage() {
     resetShopState();
     setPhase("shop");
   }, [resetShopState]);
+
+  const handleShopPlayAgain = useCallback((gameType: ShopGameType) => {
+    const item = SHOP_ITEMS.find((i) => i.id === gameType);
+    if (!item) return;
+    const newCoins = purchaseShopItem(coins, item);
+    if (newCoins === null) return;
+
+    playSound("click");
+    setCoins(newCoins);
+    saveCoins(newCoins);
+    recordShopPurchase(item.cost);
+
+    // Reset game-specific state for fresh round
+    switch (gameType) {
+      case "coin-flip":
+        setCoinFlipChoice(null);
+        setCoinFlipResult(null);
+        setCoinFlipAnimating(false);
+        if (coinFlipTimeoutRef.current) clearTimeout(coinFlipTimeoutRef.current);
+        break;
+      case "treasure-chest":
+        setTreasureChests(generateTreasureChests());
+        setTreasureOpenedIndex(null);
+        break;
+      case "slot-machine":
+        setSlotResult(null);
+        setSlotSpinning(false);
+        setSlotReelsStopped([false, false, false]);
+        if (slotTimeoutRef.current) clearTimeout(slotTimeoutRef.current);
+        break;
+    }
+  }, [coins]);
 
   // ── Overlay Mini-Game (during gameplay) ───────────────
 
@@ -1173,6 +1206,37 @@ export default function MemoryQuestPage() {
     setMiniGameOverlay(null);
     setLocked(false);
   }, [resetShopState]);
+
+  const handleOverlayPlayAgain = useCallback((gameType: ShopGameType) => {
+    const item = SHOP_ITEMS.find((i) => i.id === gameType);
+    if (!item) return;
+    const newCoins = purchaseShopItem(coins, item);
+    if (newCoins === null) return;
+
+    playSound("click");
+    setCoins(newCoins);
+    saveCoins(newCoins);
+    recordShopPurchase(item.cost);
+
+    switch (gameType) {
+      case "coin-flip":
+        setCoinFlipChoice(null);
+        setCoinFlipResult(null);
+        setCoinFlipAnimating(false);
+        if (coinFlipTimeoutRef.current) clearTimeout(coinFlipTimeoutRef.current);
+        break;
+      case "treasure-chest":
+        setTreasureChests(generateTreasureChests());
+        setTreasureOpenedIndex(null);
+        break;
+      case "slot-machine":
+        setSlotResult(null);
+        setSlotSpinning(false);
+        setSlotReelsStopped([false, false, false]);
+        if (slotTimeoutRef.current) clearTimeout(slotTimeoutRef.current);
+        break;
+    }
+  }, [coins]);
 
   // ── Tab Navigation ──────────────────────────────────
 
@@ -1977,8 +2041,10 @@ export default function MemoryQuestPage() {
           coinFlipChoice={coinFlipChoice}
           coinFlipResult={coinFlipResult}
           coinFlipAnimating={coinFlipAnimating}
+          coins={coins}
           onPick={handleCoinFlipPick}
           onContinue={handleShopGameContinue}
+          onPlayAgain={() => handleShopPlayAgain("coin-flip")}
         />
       )}
 
@@ -1987,8 +2053,10 @@ export default function MemoryQuestPage() {
         <TreasureChestGame
           chests={treasureChests}
           openedIndex={treasureOpenedIndex}
+          coins={coins}
           onPick={handleTreasureChestPick}
           onContinue={handleShopGameContinue}
+          onPlayAgain={() => handleShopPlayAgain("treasure-chest")}
         />
       )}
 
@@ -1998,8 +2066,10 @@ export default function MemoryQuestPage() {
           slotResult={slotResult}
           slotSpinning={slotSpinning}
           slotReelsStopped={slotReelsStopped}
+          coins={coins}
           onPull={handleSlotPull}
           onContinue={handleShopGameContinue}
+          onPlayAgain={() => handleShopPlayAgain("slot-machine")}
         />
       )}
 
@@ -2052,16 +2122,20 @@ export default function MemoryQuestPage() {
               coinFlipChoice={coinFlipChoice}
               coinFlipResult={coinFlipResult}
               coinFlipAnimating={coinFlipAnimating}
+              coins={coins}
               onPick={handleCoinFlipPick}
               onContinue={handleOverlayContinue}
+              onPlayAgain={() => handleOverlayPlayAgain("coin-flip")}
             />
           )}
           {miniGameOverlay === "treasure-chest" && (
             <TreasureChestGame
               chests={treasureChests}
               openedIndex={treasureOpenedIndex}
+              coins={coins}
               onPick={handleTreasureChestPick}
               onContinue={handleOverlayContinue}
+              onPlayAgain={() => handleOverlayPlayAgain("treasure-chest")}
             />
           )}
           {miniGameOverlay === "slot-machine" && (
@@ -2069,8 +2143,10 @@ export default function MemoryQuestPage() {
               slotResult={slotResult}
               slotSpinning={slotSpinning}
               slotReelsStopped={slotReelsStopped}
+              coins={coins}
               onPull={handleSlotPull}
               onContinue={handleOverlayContinue}
+              onPlayAgain={() => handleOverlayPlayAgain("slot-machine")}
             />
           )}
         </MiniGameOverlay>

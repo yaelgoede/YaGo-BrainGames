@@ -56,10 +56,10 @@ export const EVENT_THEMES: EventTheme[] = [
 
 const MIN_DURATION_MS = 30 * 60_000;
 const MAX_DURATION_MS = 90 * 60_000;
-const MIN_COOLDOWN_MS = 2 * 60 * 60_000;
-const MAX_COOLDOWN_MS = 4 * 60 * 60_000;
+const MIN_COOLDOWN_MS = 10 * 60_000;
+const MAX_COOLDOWN_MS = 20 * 60_000;
 
-const TRIGGER_CHANCE = 0.4; // 40% chance per check
+const TRIGGER_CHANCE = 0.6; // 60% chance per check
 
 const TIER_WEIGHTS: { tier: EventTier; weight: number }[] = [
   { tier: "bronze", weight: 50 },

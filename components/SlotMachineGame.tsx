@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SlotResult } from "@/lib/games/memory-quest-shop";
 import { SLOT_SYMBOL_EMOJIS, type SlotSymbol } from "@/lib/games/memory-quest-shop";
 
@@ -9,21 +10,90 @@ interface SlotMachineGameProps {
   slotResult: SlotResult | null;
   slotSpinning: boolean;
   slotReelsStopped: boolean[];
+  coins: number;
   onPull: () => void;
   onContinue: () => void;
+  onPlayAgain: () => void;
 }
 
 export default function SlotMachineGame({
   slotResult,
   slotSpinning,
   slotReelsStopped,
+  coins,
   onPull,
   onContinue,
+  onPlayAgain,
 }: SlotMachineGameProps) {
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [sessionNet, setSessionNet] = useState(0);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasStartedRef = useRef(false);
+  const COST = 300;
+
+  const canAfford = coins >= COST;
+
+  // Track session profit/loss (only after all reels stop)
+  useEffect(() => {
+    if (slotResult && !slotSpinning) {
+      setSessionNet((prev) => prev + slotResult.reward.coins - COST);
+    }
+  }, [slotResult, slotSpinning]);
+
+  // Auto-play: after result shown, wait 1.5s then play again
+  useEffect(() => {
+    if (autoPlay && slotResult && !slotSpinning) {
+      if (!canAfford) {
+        setAutoPlay(false);
+        return;
+      }
+      autoTimerRef.current = setTimeout(() => {
+        onPlayAgain();
+      }, 1500);
+      return () => {
+        if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      };
+    }
+  }, [autoPlay, slotResult, slotSpinning, canAfford, onPlayAgain]);
+
+  // Auto-pull after reset (when slotResult becomes null during auto-play)
+  useEffect(() => {
+    if (autoPlay && !slotResult && !slotSpinning && hasStartedRef.current) {
+      const t = setTimeout(() => onPull(), 100);
+      return () => clearTimeout(t);
+    }
+    if (slotResult) hasStartedRef.current = true;
+  }, [autoPlay, slotResult, slotSpinning, onPull]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+  }, []);
+
+  const toggleAuto = useCallback(() => {
+    setAutoPlay((prev) => !prev);
+  }, []);
+
   return (
     <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
       <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🎰 Slot Machine</h2>
       <p className="text-base text-gray-400">Match symbols to win — triple 7s for the jackpot!</p>
+      <div className="coin-badge rounded-full px-4 py-1.5 text-sm font-bold">
+        <span>🪙</span> <span className="text-yellow-300">{coins.toLocaleString()}</span>
+      </div>
+
+      {/* Session net counter */}
+      {sessionNet !== 0 && (
+        <div className={`rounded-xl px-4 py-1.5 text-sm font-bold ${
+          sessionNet > 0
+            ? "bg-green-500/15 text-green-400"
+            : "bg-red-500/15 text-red-400"
+        }`}>
+          Session: {sessionNet > 0 ? "+" : ""}{sessionNet} 🪙
+        </div>
+      )}
 
       {/* Reels */}
       <div
@@ -49,11 +119,18 @@ export default function SlotMachineGame({
             >
               {slotSpinning && !stopped ? (
                 <div className="animate-reel-scroll flex flex-col items-center justify-center">
-                  {SCROLL_EMOJIS.concat(SCROLL_EMOJIS).map((sym, j) => (
-                    <div key={j} className="flex h-24 w-24 shrink-0 items-center justify-center text-4xl">
-                      {SLOT_SYMBOL_EMOJIS[sym]}
-                    </div>
-                  ))}
+                  {(() => {
+                    const resultSymbol = slotResult?.reels[i];
+                    // Build scroll list that includes the actual result symbol
+                    const scrollList = resultSymbol
+                      ? [...SCROLL_EMOJIS.filter(s => s !== resultSymbol), resultSymbol, ...SCROLL_EMOJIS.filter(s => s !== resultSymbol), resultSymbol]
+                      : SCROLL_EMOJIS.concat(SCROLL_EMOJIS);
+                    return scrollList.map((sym, j) => (
+                      <div key={j} className="flex h-24 w-24 shrink-0 items-center justify-center text-4xl">
+                        {SLOT_SYMBOL_EMOJIS[sym]}
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <div className={`flex h-24 w-24 items-center justify-center text-4xl ${stopped ? "animate-reel-land" : ""}`}>
@@ -69,19 +146,41 @@ export default function SlotMachineGame({
 
       {/* Pull or Result */}
       {!slotResult && !slotSpinning && (
-        <button
-          onClick={onPull}
-          className="gradient-btn animate-gradient w-full max-w-sm rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
-        >
-          Pull!
-        </button>
+        <div className="flex w-full max-w-sm gap-3">
+          <button
+            onClick={onPull}
+            className="gradient-btn animate-gradient flex-1 rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
+          >
+            Pull!
+          </button>
+          <button
+            onClick={toggleAuto}
+            className={`rounded-2xl px-5 py-4 text-sm font-bold transition ${
+              autoPlay
+                ? "animate-auto-play-pulse bg-green-500/30 text-green-300 border border-green-500/50"
+                : "bg-white/10 text-gray-400 hover:bg-white/15"
+            }`}
+          >
+            {autoPlay ? "Stop" : "Auto"}
+          </button>
+        </div>
       )}
 
       {slotSpinning && (
-        <p className="text-lg font-bold text-gray-400">Spinning...</p>
+        <div className="flex w-full max-w-sm items-center justify-between">
+          <p className="text-lg font-bold text-gray-400">Spinning...</p>
+          {autoPlay && (
+            <button
+              onClick={toggleAuto}
+              className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-bold text-red-400 border border-red-500/40 transition hover:bg-red-500/30"
+            >
+              Stop
+            </button>
+          )}
+        </div>
       )}
 
-      {slotResult && (
+      {slotResult && !slotSpinning && (
         <div className="animate-reward-reveal flex flex-col items-center gap-3">
           <div
             className={`rounded-2xl px-6 py-4 text-center shadow-lg ${
@@ -119,12 +218,39 @@ export default function SlotMachineGame({
               </div>
             )}
           </div>
-          <button
-            onClick={onContinue}
-            className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
-          >
-            Continue
-          </button>
+
+          {!autoPlay && (
+            <div className="flex w-full max-w-sm gap-3">
+              <button
+                onClick={onContinue}
+                className="gradient-btn flex-1 rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+              >
+                Continue
+              </button>
+              {canAfford && (
+                <button
+                  onClick={onPlayAgain}
+                  className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/15"
+                >
+                  Again 🪙{COST}
+                </button>
+              )}
+            </div>
+          )}
+
+          {autoPlay && (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-gray-500">
+                {canAfford ? "Next spin in a moment..." : "Out of coins!"}
+              </p>
+              <button
+                onClick={toggleAuto}
+                className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-bold text-red-400 border border-red-500/40 transition hover:bg-red-500/30"
+              >
+                Stop
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

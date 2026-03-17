@@ -1038,6 +1038,12 @@ body::before {
 }
 .animate-fab-pulse { animation: fab-pulse 2s ease-in-out infinite; }
 
+@keyframes auto-play-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.6); }
+}
+.animate-auto-play-pulse { animation: auto-play-pulse 1.5s ease-in-out infinite; }
+
 @keyframes fab-enter {
   0% { opacity: 0; transform: translateX(60px); }
   100% { opacity: 1; transform: translateX(0); }

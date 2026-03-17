@@ -1,26 +1,103 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CoinFlipChoice, CoinFlipResult } from "@/lib/games/memory-quest-shop";
 
 interface CoinFlipGameProps {
   coinFlipChoice: CoinFlipChoice | null;
   coinFlipResult: CoinFlipResult | null;
   coinFlipAnimating: boolean;
+  coins: number;
   onPick: (choice: CoinFlipChoice) => void;
   onContinue: () => void;
+  onPlayAgain: () => void;
 }
 
 export default function CoinFlipGame({
   coinFlipChoice,
   coinFlipResult,
   coinFlipAnimating,
+  coins,
   onPick,
   onContinue,
+  onPlayAgain,
 }: CoinFlipGameProps) {
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [autoChoice, setAutoChoice] = useState<CoinFlipChoice | null>(null);
+  const [sessionNet, setSessionNet] = useState(0);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const COST = 50;
+
+  const canAfford = coins >= COST;
+
+  // Track session profit/loss
+  useEffect(() => {
+    if (coinFlipResult) {
+      setSessionNet((prev) => prev + coinFlipResult.reward.coins - COST);
+    }
+  }, [coinFlipResult]);
+
+  // Auto-play: after result shown, wait 1.5s then play again
+  useEffect(() => {
+    if (autoPlay && coinFlipResult && !coinFlipAnimating && autoChoice) {
+      if (!canAfford) {
+        setAutoPlay(false);
+        return;
+      }
+      autoTimerRef.current = setTimeout(() => {
+        onPlayAgain();
+      }, 1500);
+      return () => {
+        if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      };
+    }
+  }, [autoPlay, coinFlipResult, coinFlipAnimating, canAfford, autoChoice, onPlayAgain]);
+
+  // Auto-pick after reset (when coinFlipResult becomes null during auto-play)
+  useEffect(() => {
+    if (autoPlay && !coinFlipResult && !coinFlipAnimating && autoChoice) {
+      const t = setTimeout(() => onPick(autoChoice), 100);
+      return () => clearTimeout(t);
+    }
+  }, [autoPlay, coinFlipResult, coinFlipAnimating, autoChoice, onPick]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+  }, []);
+
+  const handlePickWithAuto = useCallback((choice: CoinFlipChoice) => {
+    setAutoChoice(choice);
+    onPick(choice);
+  }, [onPick]);
+
+  const toggleAuto = useCallback(() => {
+    setAutoPlay((prev) => {
+      if (prev) setAutoChoice(null);
+      return !prev;
+    });
+  }, []);
+
   return (
     <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
       <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🪙 Coin Flip</h2>
       <p className="text-base text-gray-400">Pick a side — 50/50 shot!</p>
+      <div className="coin-badge rounded-full px-4 py-1.5 text-sm font-bold">
+        <span>🪙</span> <span className="text-yellow-300">{coins.toLocaleString()}</span>
+      </div>
+
+      {/* Session net counter */}
+      {sessionNet !== 0 && (
+        <div className={`rounded-xl px-4 py-1.5 text-sm font-bold ${
+          sessionNet > 0
+            ? "bg-green-500/15 text-green-400"
+            : "bg-red-500/15 text-red-400"
+        }`}>
+          Session: {sessionNet > 0 ? "+" : ""}{sessionNet} 🪙
+        </div>
+      )}
 
       {/* Coin display */}
       <div
@@ -44,26 +121,50 @@ export default function CoinFlipGame({
 
       {/* Choice buttons or result */}
       {!coinFlipResult && !coinFlipAnimating && (
-        <div className="flex gap-4">
-          <button
-            onClick={() => onPick("heads")}
-            className="rounded-2xl coin-badge px-8 py-4 text-center transition hover:brightness-110"
-          >
-            <span className="block text-3xl">👑</span>
-            <span className="mt-1 block text-sm font-bold text-yellow-300">Heads</span>
-          </button>
-          <button
-            onClick={() => onPick("tails")}
-            className="rounded-2xl bg-purple-500/20 border border-purple-500/30 px-8 py-4 text-center transition hover:bg-purple-500/30"
-          >
-            <span className="block text-3xl">🛡️</span>
-            <span className="mt-1 block text-sm font-bold text-purple-300">Tails</span>
-          </button>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex gap-4">
+            <button
+              onClick={() => handlePickWithAuto("heads")}
+              className="rounded-2xl coin-badge px-8 py-4 text-center transition hover:brightness-110"
+            >
+              <span className="block text-3xl">👑</span>
+              <span className="mt-1 block text-sm font-bold text-yellow-300">Heads</span>
+            </button>
+            <button
+              onClick={() => handlePickWithAuto("tails")}
+              className="rounded-2xl bg-purple-500/20 border border-purple-500/30 px-8 py-4 text-center transition hover:bg-purple-500/30"
+            >
+              <span className="block text-3xl">🛡️</span>
+              <span className="mt-1 block text-sm font-bold text-purple-300">Tails</span>
+            </button>
+          </div>
+          {autoChoice && (
+            <button
+              onClick={toggleAuto}
+              className={`rounded-2xl px-5 py-2 text-sm font-bold transition ${
+                autoPlay
+                  ? "animate-auto-play-pulse bg-green-500/30 text-green-300 border border-green-500/50"
+                  : "bg-white/10 text-gray-400 hover:bg-white/15"
+              }`}
+            >
+              {autoPlay ? "Stop Auto" : `Auto (${autoChoice === "heads" ? "👑" : "🛡️"})`}
+            </button>
+          )}
         </div>
       )}
 
       {coinFlipAnimating && (
-        <p className="text-lg font-bold text-gray-400">Flipping...</p>
+        <div className="flex items-center gap-3">
+          <p className="text-lg font-bold text-gray-400">Flipping...</p>
+          {autoPlay && (
+            <button
+              onClick={toggleAuto}
+              className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-bold text-red-400 border border-red-500/40 transition hover:bg-red-500/30"
+            >
+              Stop
+            </button>
+          )}
+        </div>
       )}
 
       {coinFlipResult && (
@@ -92,12 +193,39 @@ export default function CoinFlipGame({
               </div>
             )}
           </div>
-          <button
-            onClick={onContinue}
-            className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
-          >
-            Continue
-          </button>
+
+          {!autoPlay && (
+            <div className="flex w-full max-w-sm gap-3">
+              <button
+                onClick={onContinue}
+                className="gradient-btn flex-1 rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+              >
+                Continue
+              </button>
+              {canAfford && (
+                <button
+                  onClick={onPlayAgain}
+                  className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/15"
+                >
+                  Again 🪙{COST}
+                </button>
+              )}
+            </div>
+          )}
+
+          {autoPlay && (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-gray-500">
+                {canAfford ? "Next flip in a moment..." : "Out of coins!"}
+              </p>
+              <button
+                onClick={toggleAuto}
+                className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-bold text-red-400 border border-red-500/40 transition hover:bg-red-500/30"
+              >
+                Stop
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
