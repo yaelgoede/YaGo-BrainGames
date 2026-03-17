@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { PlayerStats } from "@/lib/games/memory-quest-economy";
 import { WHEEL_TRIGGER_EVERY, getClosestMilestone, getMilestoneProgress } from "@/lib/games/memory-quest-economy";
 
@@ -15,7 +16,7 @@ export default function HUDProgressIndicators({
   achievedMilestones,
 }: HUDProgressIndicatorsProps) {
   const boardsUntilWheel = WHEEL_TRIGGER_EVERY - (eventClears % WHEEL_TRIGGER_EVERY);
-  const nextMilestone = getClosestMilestone(stats, achievedMilestones);
+  const nextMilestone = useMemo(() => getClosestMilestone(stats, achievedMilestones), [stats, achievedMilestones]);
   const milestoneProgress = nextMilestone ? getMilestoneProgress(nextMilestone, stats) : 0;
 
   return (

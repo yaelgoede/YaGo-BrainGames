@@ -1,6 +1,7 @@
 // Memory Quest — Economy, Persistence & Progression (pure functions, no React)
 
 import { safe, store } from "@/lib/storage";
+import { randInt } from "@/lib/utils";
 
 export const MAX_ENERGY = 50;
 export const ENERGY_REGEN_MS = 60_000; // 1 minute
@@ -373,7 +374,7 @@ export function shouldTriggerSafetyNet(
 }
 
 export function calculateSafetyNetGift(): number {
-  return SAFETY_NET_GIFT_MIN + Math.floor(Math.random() * (SAFETY_NET_GIFT_MAX - SAFETY_NET_GIFT_MIN + 1));
+  return randInt(SAFETY_NET_GIFT_MIN, SAFETY_NET_GIFT_MAX);
 }
 
 // ── Second Wind ───────────────────────────────────────

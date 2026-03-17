@@ -17,18 +17,24 @@ function getContext(): AudioContext | null {
   return audioCtx;
 }
 
+let _muted =
+  typeof window !== "undefined"
+    ? localStorage.getItem("sound-muted") === "true"
+    : false;
+
 export function isMuted(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem("sound-muted") === "true";
+  return _muted;
 }
 
 export function setMuted(muted: boolean): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("sound-muted", String(muted));
+  _muted = muted;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("sound-muted", String(muted));
+  }
 }
 
 export function toggleMute(): boolean {
-  const next = !isMuted();
+  const next = !_muted;
   setMuted(next);
   return next;
 }

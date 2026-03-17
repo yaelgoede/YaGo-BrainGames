@@ -13,8 +13,6 @@ import {
   addEnergy,
   loadCoins,
   saveCoins,
-  loadLabLevel,
-  saveLabLevel,
   type LabState,
   type EquipmentId,
   loadLabState,
@@ -104,7 +102,6 @@ import {
   type TreasureChest as TreasureChestType,
   type SlotResult,
   SHOP_ITEMS,
-  canAffordShopItem,
   purchaseShopItem,
   playCoinFlip,
   generateTreasureChests,
@@ -125,7 +122,7 @@ import HUDProgressIndicators from "@/components/HUDProgressIndicators";
 
 // ── Types ──────────────────────────────────────────────
 
-type Phase = "idle" | "playing" | "board-clear" | "event-wheel" | "event-scratch" | "quit-summary" | "shop" | "shop-coin-flip" | "shop-treasure" | "shop-slots" | "achievements";
+type Phase = "idle" | "playing" | "board-clear" | "event-wheel" | "event-scratch" | "quit-summary" | "achievements";
 
 interface MilestoneToast {
   key: number;
@@ -150,7 +147,6 @@ export default function MemoryQuestPage() {
   // Economy (loaded from localStorage)
   const [energy, setEnergy] = useState<EnergyState>(() => ({ amount: MAX_ENERGY, lastUpdated: Date.now() }));
   const [coins, setCoins] = useState(0);
-  const [labLevel, setLabLevel] = useState(0);
   const [labState, setLabState] = useState<LabState>(() => ({ levels: { scanner: 0, amplifier: 0, reactor: 0, processor: 0, matrix: 0, beacon: 0 }, research: { activeResearch: null, startedAt: 0, baseDurationMs: 0, playAcceleration: 0 } }));
   const [showResearchLab, setShowResearchLab] = useState(false);
   const [stats, setStats] = useState<PlayerStats>({
@@ -169,6 +165,8 @@ export default function MemoryQuestPage() {
   const effectiveRegenMs = useMemo(() => getEffectiveRegenMs(starPathBonuses, labBonuses), [starPathBonuses, labBonuses]);
   const starPathBonusSummaryMemo = useMemo(() => getStarPathBonusSummary(starPathLevel), [starPathLevel]);
   const labBonusSummaryMemo = useMemo(() => getLabBonusSummary(labState), [labState]);
+  const nextStarPathMemo = useMemo(() => getStarPathLevel(starPathLevel + 1), [starPathLevel]);
+  const canAffordNextStarPath = useMemo(() => canAffordStarPath(coins, starPathLevel), [coins, starPathLevel]);
 
   // Game state
   const [round, setRound] = useState(1);
@@ -183,7 +181,6 @@ export default function MemoryQuestPage() {
   // UI state
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
-  const [showLab, setShowLab] = useState(false);
   const [showStarPath, setShowStarPath] = useState(false);
   const [muted, setMuted] = useState(false);
   const [comboAnim, setComboAnim] = useState(false);
@@ -256,7 +253,6 @@ export default function MemoryQuestPage() {
   useEffect(() => {
     setEnergy(loadEnergy());
     setCoins(loadCoins());
-    setLabLevel(loadLabLevel());
     setLabState(loadLabState());
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
@@ -372,7 +368,6 @@ export default function MemoryQuestPage() {
 
   const config = getBoardConfig(round);
   const matchSize = getMatchSize(round);
-  void labLevel; // legacy, kept for old save loading
 
   // Derived state (no useState needed)
   const pendingScratchCard = timedEvent !== null && timedEvent.completed && !timedEvent.rewardClaimed;
@@ -384,7 +379,6 @@ export default function MemoryQuestPage() {
 
   // Derived: active tab for bottom nav
   const activeTab = phase === "achievements" ? "achievements" as const
-    : phase === "shop" || phase === "shop-coin-flip" || phase === "shop-treasure" || phase === "shop-slots" ? "shop" as const
     : gameInProgress ? "play" as const
     : "home" as const;
 
@@ -424,6 +418,27 @@ export default function MemoryQuestPage() {
     setTimeout(() => setMilestoneToasts((prev) => prev.filter((t) => t.key !== key)), 3200);
   }, []);
 
+  const earnCoins = useCallback((amount: number) => {
+    setCoins((prev) => { const n = prev + amount; saveCoins(n); return n; });
+  }, []);
+
+  const earnEnergy = useCallback((amount: number) => {
+    setEnergy((prev) => { const e = addEnergy(prev, amount); saveEnergy(e); return e; });
+  }, []);
+
+  /** Attempt to purchase a shop mini-game. Returns false if purchase fails. */
+  const debitForMiniGame = useCallback((gameType: ShopGameType): boolean => {
+    const item = SHOP_ITEMS.find((i) => i.id === gameType);
+    if (!item) return false;
+    const newCoins = purchaseShopItem(coins, item);
+    if (newCoins === null) return false;
+    playSound("click");
+    setCoins(newCoins);
+    saveCoins(newCoins);
+    recordShopPurchase(item.cost);
+    return true;
+  }, [coins]);
+
   // ── Advance to Next Round helper ─────────────────────
 
   const advanceToNextRound = useCallback((nextRound: number) => {
@@ -462,7 +477,7 @@ export default function MemoryQuestPage() {
     setFocusedIndex(0);
     setLocked(false);
     setMatchedIds(new Set());
-    setShakeIds(new Set());
+    setShakeIds(EMPTY_SET);
     setSessionBoardsCleared(0);
     setBoardsSinceLastSafetyNet(0);
     setSafetyNetGift(null);
@@ -552,7 +567,7 @@ export default function MemoryQuestPage() {
             return c;
           });
           setFlippedIndices([]);
-          setShakeIds(new Set());
+          setShakeIds(EMPTY_SET);
           setLocked(false);
         }, 800);
         return;
@@ -678,11 +693,7 @@ export default function MemoryQuestPage() {
             saveCoins(withBonus);
           }
           if (bonusEnergy > 0) {
-            setEnergy((prev) => {
-              const e = addEnergy(prev, bonusEnergy);
-              saveEnergy(e);
-              return e;
-            });
+            earnEnergy(bonusEnergy);
           }
         }
         return updated;
@@ -705,11 +716,7 @@ export default function MemoryQuestPage() {
 
         // Board clear energy reward
         if (clearReward.energy > 0) {
-          setEnergy((prev) => {
-            const e = addEnergy(prev, clearReward.energy);
-            saveEnergy(e);
-            return e;
-          });
+          earnEnergy(clearReward.energy);
         }
 
         // Streak bonus
@@ -717,11 +724,7 @@ export default function MemoryQuestPage() {
         setSessionBoardsCleared(newSessionBoards);
         const streakBonusAmount = calculateStreakBonus(newSessionBoards);
         if (streakBonusAmount > 0) {
-          setEnergy((prev) => {
-            const e = addEnergy(prev, streakBonusAmount);
-            saveEnergy(e);
-            return e;
-          });
+          earnEnergy(streakBonusAmount);
           setStreakToast(streakBonusAmount);
           setTimeout(() => setStreakToast(null), 2000);
         }
@@ -808,7 +811,7 @@ export default function MemoryQuestPage() {
         }, 2500);
       }
     },
-    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank, starPathBonuses, effectiveMaxEnergy],
+    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank, starPathBonuses, effectiveMaxEnergy, earnEnergy, labBonuses, pendingScratchCard],
   );
 
   // ── Quit (show summary, then back to idle) ──────────
@@ -836,14 +839,12 @@ export default function MemoryQuestPage() {
     setPhase("idle");
     setEnergy(loadEnergy());
     setCoins(loadCoins());
-    setLabLevel(loadLabLevel());
     setLabState(loadLabState());
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
     setStarRank(loadStarRank());
     setShowPrestigeConfirm(false);
-    setShowLab(false);
     setShowStarPath(false);
     setLocked(false);
     setBoardClearing(false);
@@ -976,22 +977,14 @@ export default function MemoryQuestPage() {
 
       // Apply rewards
       if (segment.coins > 0) {
-        setCoins((prev) => {
-          const n = prev + segment.coins;
-          saveCoins(n);
-          return n;
-        });
+        earnCoins(segment.coins);
         setSessionCoins((sc) => sc + segment.coins);
       }
       if (segment.energy > 0) {
-        setEnergy((prev) => {
-          const e = addEnergy(prev, segment.energy);
-          saveEnergy(e);
-          return e;
-        });
+        earnEnergy(segment.energy);
       }
     }, 4200); // Match CSS transition duration
-  }, [wheelSpinning, wheelShowResult, wheelRotation]);
+  }, [wheelSpinning, wheelShowResult, wheelRotation, earnCoins, earnEnergy]);
 
   const handleWheelContinue = useCallback(() => {
     setWheelShowResult(false);
@@ -1023,26 +1016,18 @@ export default function MemoryQuestPage() {
 
       // Apply rewards
       if (prize.coins > 0) {
-        setCoins((prev) => {
-          const n = prev + prize.coins;
-          saveCoins(n);
-          return n;
-        });
+        earnCoins(prize.coins);
         setSessionCoins((sc) => sc + prize.coins);
       }
       if (prize.energy > 0) {
-        setEnergy((prev) => {
-          const e = addEnergy(prev, prize.energy);
-          saveEnergy(e);
-          return e;
-        });
+        earnEnergy(prize.energy);
       }
     } else if (isScratchComplete(newCells)) {
       // All cells revealed but no 3-match (shouldn't happen with our generation, but safety)
 
       playSound("bust");
     }
-  }, [scratchCells, scratchPrize, timedEvent]);
+  }, [scratchCells, scratchPrize, timedEvent, scratchFinished, earnCoins, earnEnergy]);
 
   const handleScratchContinue = useCallback(() => {
     // Mark event reward as claimed
@@ -1074,60 +1059,12 @@ export default function MemoryQuestPage() {
     if (slotTimeoutRef.current) clearTimeout(slotTimeoutRef.current);
   }, []);
 
-  const handleOpenShop = useCallback(() => {
-    playSound("click");
-    setShowLab(false);
-    setShowStarPath(false);
-    setPhase("shop");
-  }, []);
-
-  const handleShopBack = useCallback(() => {
-    playSound("click");
-    resetShopState();
-    setPhase("idle");
-  }, [resetShopState]);
-
-  const handleBuyGame = useCallback((gameType: ShopGameType) => {
-    const item = SHOP_ITEMS.find((i) => i.id === gameType);
-    if (!item) return;
-    const newCoins = purchaseShopItem(coins, item);
-    if (newCoins === null) return;
-
-    playSound("click");
-    setCoins(newCoins);
-    saveCoins(newCoins);
-    recordShopPurchase(item.cost);
-
-    resetShopState();
-
-    switch (gameType) {
-      case "coin-flip":
-        setPhase("shop-coin-flip");
-        break;
-      case "treasure-chest":
-        setTreasureChests(generateTreasureChests());
-        setPhase("shop-treasure");
-        break;
-      case "slot-machine":
-        setPhase("shop-slots");
-        break;
-    }
-  }, [coins, resetShopState]);
-
   const applyShopReward = useCallback((reward: { coins: number; energy: number; triggerEvent: boolean }) => {
     if (reward.coins > 0) {
-      setCoins((prev) => {
-        const n = prev + reward.coins;
-        saveCoins(n);
-        return n;
-      });
+      earnCoins(reward.coins);
     }
     if (reward.energy > 0) {
-      setEnergy((prev) => {
-        const e = addEnergy(prev, reward.energy);
-        saveEnergy(e);
-        return e;
-      });
+      earnEnergy(reward.energy);
     }
     if (reward.triggerEvent) {
       // Shop drops bypass cooldown — only check for active event
@@ -1138,15 +1075,10 @@ export default function MemoryQuestPage() {
         setTimedEvent(newEvent);
       } else {
         // Already has an active event — give coins instead
-        const bonus = 100;
-        setCoins((prev) => {
-          const n = prev + bonus;
-          saveCoins(n);
-          return n;
-        });
+        earnCoins(100);
       }
     }
-  }, []);
+  }, [earnCoins, earnEnergy]);
 
   const handleCoinFlipPick = useCallback((choice: CoinFlipChoice) => {
     if (coinFlipAnimating) return;
@@ -1229,24 +1161,7 @@ export default function MemoryQuestPage() {
     stopReel(0);
   }, [slotSpinning, slotResult, applyShopReward]);
 
-  const handleShopGameContinue = useCallback(() => {
-    playSound("click");
-    resetShopState();
-    setPhase("shop");
-  }, [resetShopState]);
-
-  const handleShopPlayAgain = useCallback((gameType: ShopGameType) => {
-    const item = SHOP_ITEMS.find((i) => i.id === gameType);
-    if (!item) return;
-    const newCoins = purchaseShopItem(coins, item);
-    if (newCoins === null) return;
-
-    playSound("click");
-    setCoins(newCoins);
-    saveCoins(newCoins);
-    recordShopPurchase(item.cost);
-
-    // Reset game-specific state for fresh round
+  const resetGameForType = useCallback((gameType: ShopGameType) => {
     switch (gameType) {
       case "coin-flip":
         setCoinFlipChoice(null);
@@ -1265,20 +1180,12 @@ export default function MemoryQuestPage() {
         if (slotTimeoutRef.current) clearTimeout(slotTimeoutRef.current);
         break;
     }
-  }, [coins]);
+  }, []);
 
   // ── Overlay Mini-Game (during gameplay) ───────────────
 
   const handleOverlayBuyGame = useCallback((gameType: ShopGameType) => {
-    const item = SHOP_ITEMS.find((i) => i.id === gameType);
-    if (!item) return;
-    const newCoins = purchaseShopItem(coins, item);
-    if (newCoins === null) return;
-
-    playSound("click");
-    setCoins(newCoins);
-    saveCoins(newCoins);
-    recordShopPurchase(item.cost);
+    if (!debitForMiniGame(gameType)) return;
     resetShopState();
 
     if (gameType === "treasure-chest") {
@@ -1287,7 +1194,7 @@ export default function MemoryQuestPage() {
 
     setMiniGameOverlay(gameType);
     setLocked(true);
-  }, [coins, resetShopState]);
+  }, [debitForMiniGame, resetShopState]);
 
   const handleOverlayContinue = useCallback(() => {
     playSound("click");
@@ -1297,39 +1204,13 @@ export default function MemoryQuestPage() {
   }, [resetShopState]);
 
   const handleOverlayPlayAgain = useCallback((gameType: ShopGameType) => {
-    const item = SHOP_ITEMS.find((i) => i.id === gameType);
-    if (!item) return;
-    const newCoins = purchaseShopItem(coins, item);
-    if (newCoins === null) return;
-
-    playSound("click");
-    setCoins(newCoins);
-    saveCoins(newCoins);
-    recordShopPurchase(item.cost);
-
-    switch (gameType) {
-      case "coin-flip":
-        setCoinFlipChoice(null);
-        setCoinFlipResult(null);
-        setCoinFlipAnimating(false);
-        if (coinFlipTimeoutRef.current) clearTimeout(coinFlipTimeoutRef.current);
-        break;
-      case "treasure-chest":
-        setTreasureChests(generateTreasureChests());
-        setTreasureOpenedIndex(null);
-        break;
-      case "slot-machine":
-        setSlotResult(null);
-        setSlotSpinning(false);
-        setSlotReelsStopped([false, false, false]);
-        if (slotTimeoutRef.current) clearTimeout(slotTimeoutRef.current);
-        break;
-    }
-  }, [coins]);
+    if (!debitForMiniGame(gameType)) return;
+    resetGameForType(gameType);
+  }, [debitForMiniGame, resetGameForType]);
 
   // ── Tab Navigation ──────────────────────────────────
 
-  const handleTabNavigate = useCallback((tab: "home" | "play" | "shop" | "achievements") => {
+  const handleTabNavigate = useCallback((tab: "home" | "play" | "achievements") => {
     playSound("click");
 
     // Save current game phase if navigating away from game
@@ -1339,7 +1220,6 @@ export default function MemoryQuestPage() {
 
     switch (tab) {
       case "home":
-        setShowLab(false);
         setShowStarPath(false);
         setPhase("idle");
         break;
@@ -1354,10 +1234,6 @@ export default function MemoryQuestPage() {
         }
         // If already in game, do nothing
         break;
-      case "shop":
-        resetShopState();
-        setPhase("shop");
-        break;
       case "achievements":
         setPhase("achievements");
         break;
@@ -1366,21 +1242,30 @@ export default function MemoryQuestPage() {
 
   // ── Keyboard Navigation ──────────────────────────────
 
+  const handleFlipRef = useRef(handleFlip);
+  handleFlipRef.current = handleFlip;
+  const startRef = useRef(start);
+  startRef.current = start;
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  const focusedIndexRef = useRef(focusedIndex);
+  focusedIndexRef.current = focusedIndex;
+  const configRef = useRef(config);
+  configRef.current = config;
+  const cardsLengthRef = useRef(cards.length);
+  cardsLengthRef.current = cards.length;
+
   useEffect(() => {
-    if (phase === "idle") {
-      const handler = (e: KeyboardEvent) => {
-        if (e.key === "Enter") start();
-      };
-      window.addEventListener("keydown", handler);
-      return () => window.removeEventListener("keydown", handler);
-    }
-
-    if (phase !== "playing") return;
-
-    const cols = config.cols;
-    const total = cards.length;
     const handler = (e: KeyboardEvent) => {
-      if (locked) return;
+      if (phase === "idle") {
+        if (e.key === "Enter") startRef.current();
+        return;
+      }
+      if (phase !== "playing") return;
+      if (lockedRef.current) return;
+
+      const cols = configRef.current.cols;
+      const total = cardsLengthRef.current;
       switch (e.key) {
         case "ArrowRight":
           e.preventDefault();
@@ -1401,13 +1286,13 @@ export default function MemoryQuestPage() {
         case "Enter":
         case " ":
           e.preventDefault();
-          handleFlip(focusedIndex);
+          handleFlipRef.current(focusedIndexRef.current);
           break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [phase, locked, focusedIndex, cards.length, config.cols, handleFlip, start]);
+  }, [phase]);
 
   // ── Mute Toggle ──────────────────────────────────────
 
@@ -1599,8 +1484,8 @@ export default function MemoryQuestPage() {
           </button>
 
           {showStarPath && (() => {
-            const next = getStarPathLevel(starPathLevel + 1);
-            const summary = getStarPathBonusSummary(starPathLevel);
+            const next = nextStarPathMemo;
+            const summary = starPathBonusSummaryMemo;
             const affordable = canAffordStarPath(coins, starPathLevel);
             return (
               <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg">
@@ -1636,14 +1521,6 @@ export default function MemoryQuestPage() {
               </div>
             );
           })()}
-
-          {/* Shop Button */}
-          <button
-            onClick={handleOpenShop}
-            className="sparkle-container rounded-xl coin-badge px-4 py-2 text-sm font-semibold text-yellow-300 text-glow-gold transition hover:brightness-110"
-          >
-            🏪 Shop
-          </button>
 
           {/* Star Rank & Prestige */}
           {starRank > 0 && (
@@ -2128,95 +2005,6 @@ export default function MemoryQuestPage() {
         </div>
       )}
 
-      {/* ── SHOP PHASE ────────────────────────────── */}
-      {phase === "shop" && (
-        <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🏪 Shop</h2>
-          <p className="text-base text-gray-400">Spend coins on mini games for a chance to win big!</p>
-
-          <div className="flex w-full max-w-md flex-col gap-4">
-            {SHOP_ITEMS.map((item) => {
-              const affordable = canAffordShopItem(coins, item);
-              return (
-                <div
-                  key={item.id}
-                  className={`rounded-2xl panel-dark p-4 shadow-lg transition ${
-                    affordable ? "animate-shop-item-hover" : "opacity-60"
-                  }`}
-                >
-                  <div className="mb-2 flex items-center gap-3">
-                    <span className="text-3xl">{item.emoji}</span>
-                    <div className="flex-1">
-                      <p className="font-bold text-white">{item.name}</p>
-                      <p className="text-sm text-gray-400">{item.description}</p>
-                    </div>
-                    <span className="rounded-full coin-badge px-3 py-1 text-sm font-bold text-yellow-300">
-                      🪙 {item.cost}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleBuyGame(item.id)}
-                    disabled={!affordable}
-                    className={`w-full rounded-xl py-2.5 font-bold text-white transition ${
-                      affordable
-                        ? "gradient-btn animate-shimmer"
-                        : "cursor-not-allowed bg-gray-700 text-gray-400"
-                    }`}
-                  >
-                    {affordable ? "Play" : "Not enough coins"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={handleShopBack}
-            className="rounded-xl bg-white/10 border border-white/20 px-6 py-2 text-base font-medium text-gray-300 transition hover:bg-white/20"
-          >
-            Back to Menu
-          </button>
-        </div>
-      )}
-
-      {/* ── COIN FLIP PHASE ──────────────────────── */}
-      {phase === "shop-coin-flip" && (
-        <CoinFlipGame
-          coinFlipChoice={coinFlipChoice}
-          coinFlipResult={coinFlipResult}
-          coinFlipAnimating={coinFlipAnimating}
-          coins={coins}
-          onPick={handleCoinFlipPick}
-          onContinue={handleShopGameContinue}
-          onPlayAgain={() => handleShopPlayAgain("coin-flip")}
-        />
-      )}
-
-      {/* ── TREASURE CHEST PHASE ─────────────────── */}
-      {phase === "shop-treasure" && (
-        <TreasureChestGame
-          chests={treasureChests}
-          openedIndex={treasureOpenedIndex}
-          coins={coins}
-          onPick={handleTreasureChestPick}
-          onContinue={handleShopGameContinue}
-          onPlayAgain={() => handleShopPlayAgain("treasure-chest")}
-        />
-      )}
-
-      {/* ── SLOT MACHINE PHASE ───────────────────── */}
-      {phase === "shop-slots" && (
-        <SlotMachineGame
-          slotResult={slotResult}
-          slotSpinning={slotSpinning}
-          slotReelsStopped={slotReelsStopped}
-          coins={coins}
-          onPull={handleSlotPull}
-          onContinue={handleShopGameContinue}
-          onPlayAgain={() => handleShopPlayAgain("slot-machine")}
-        />
-      )}
-
       {/* ── QUIT SUMMARY PHASE ─────────────────────── */}
       {phase === "quit-summary" && (
         <div className="animate-elastic-bounce flex flex-col items-center gap-4 py-8 text-center">
@@ -2275,9 +2063,9 @@ export default function MemoryQuestPage() {
         <FloatingUpgradeButtons
           labState={labState}
           starPathLevel={starPathLevel}
-          nextStarPath={getStarPathLevel(starPathLevel + 1)}
-          starPathBonusSummary={getStarPathBonusSummary(starPathLevel)}
-          canAffordStarPath={canAffordStarPath(coins, starPathLevel)}
+          nextStarPath={nextStarPathMemo}
+          starPathBonusSummary={starPathBonusSummaryMemo}
+          canAffordStarPath={canAffordNextStarPath}
           onOpenLab={() => setShowResearchLab(true)}
           onPurchaseStarPath={handleStarPathPurchase}
         />

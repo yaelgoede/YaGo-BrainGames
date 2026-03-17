@@ -1,6 +1,6 @@
 "use client";
 
-type TabId = "home" | "play" | "shop" | "achievements";
+type TabId = "home" | "play" | "achievements";
 
 interface BottomTabBarProps {
   activeTab: TabId;
@@ -11,7 +11,6 @@ interface BottomTabBarProps {
 const TABS: { id: TabId; label: string; emoji: string }[] = [
   { id: "home", label: "Home", emoji: "🏠" },
   { id: "play", label: "Play", emoji: "🎮" },
-  { id: "shop", label: "Shop", emoji: "🏪" },
   { id: "achievements", label: "Awards", emoji: "🏆" },
 ];
 
