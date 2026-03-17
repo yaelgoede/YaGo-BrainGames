@@ -16,11 +16,11 @@ export default function MiniGameOverlay({ children, onClose }: MiniGameOverlayPr
         onClick={onClose}
       />
       {/* Content */}
-      <div className="animate-overlay-content relative z-10 mx-4 w-full max-w-sm rounded-3xl panel-dark-strong border border-white/10 p-4 shadow-2xl">
+      <div className="animate-overlay-content relative z-10 mx-4 w-full max-w-md rounded-3xl panel-dark-strong border border-white/10 p-6 shadow-2xl">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-gray-400 transition hover:bg-white/20 hover:text-white"
+          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-gray-400 transition hover:bg-white/20 hover:text-white"
         >
           ✕
         </button>

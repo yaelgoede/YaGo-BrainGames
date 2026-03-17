@@ -18,8 +18,8 @@ export default function TreasureChestGame({
 }: TreasureChestGameProps) {
   return (
     <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-      <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">📦 Treasure Chest</h2>
-      <p className="text-sm text-gray-400">Pick a chest — every one has a prize!</p>
+      <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">📦 Treasure Chest</h2>
+      <p className="text-base text-gray-400">Pick a chest — every one has a prize!</p>
 
       <div className="flex gap-4">
         {chests.map((chest, i) => {
@@ -31,7 +31,7 @@ export default function TreasureChestGame({
               key={chest.id}
               onClick={() => onPick(i)}
               disabled={openedIndex !== null}
-              className={`relative flex h-28 w-24 flex-col items-center justify-center rounded-2xl text-center transition ${
+              className={`relative flex h-32 w-28 flex-col items-center justify-center rounded-2xl text-center transition ${
                 isSelected
                   ? "animate-chest-open shadow-xl"
                   : isOther
@@ -49,7 +49,7 @@ export default function TreasureChestGame({
                   <div className="animate-chest-sparkle pointer-events-none absolute inset-0 rounded-2xl border-2 border-gold-400/50" />
                   <span className="text-3xl">{chest.reward.triggerEvent ? "⭐" : chest.reward.coins > 0 ? "🪙" : "⚡"}</span>
                   <span
-                    className="mt-1 text-[10px] font-bold"
+                    className="mt-1 text-xs font-bold"
                     style={{ color: CHEST_RARITY_COLORS[chest.rarity] }}
                   >
                     {CHEST_RARITY_LABELS[chest.rarity]}
@@ -90,7 +90,7 @@ export default function TreasureChestGame({
           </div>
           <button
             onClick={onContinue}
-            className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+            className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
           >
             Continue
           </button>

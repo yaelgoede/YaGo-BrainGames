@@ -28,8 +28,8 @@ export default function AchievementsPage({ stats, achievedMilestones }: Achievem
   return (
     <div className="animate-bounce-in flex flex-col gap-5 pb-4">
       <div className="text-center">
-        <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">🏆 Achievements</h2>
-        <p className="mt-1 text-sm text-gray-400">
+        <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🏆 Achievements</h2>
+        <p className="mt-1 text-base text-gray-400">
           {achievedMilestones.length} unlocked
         </p>
       </div>
@@ -45,7 +45,7 @@ export default function AchievementsPage({ stats, achievedMilestones }: Achievem
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-xl">{meta.emoji}</span>
                 <h3 className="font-bold text-purple-300">{meta.label}</h3>
-                <span className="ml-auto text-xs text-gray-400">
+                <span className="ml-auto text-sm text-gray-400">
                   {milestones.filter((m) => achievedSet.has(m.id)).length}/{milestones.length}
                 </span>
               </div>
@@ -83,7 +83,7 @@ export default function AchievementsPage({ stats, achievedMilestones }: Achievem
                                 }}
                               />
                             </div>
-                            <span className="text-[10px] text-gray-500 text-number-bold whitespace-nowrap">
+                            <span className="text-xs text-gray-500 text-number-bold whitespace-nowrap">
                               {stats[m.stat].toLocaleString()}/{m.threshold.toLocaleString()}
                             </span>
                           </div>
@@ -91,7 +91,7 @@ export default function AchievementsPage({ stats, achievedMilestones }: Achievem
                       </div>
 
                       {/* Reward badge */}
-                      <div className="flex flex-col items-end text-[10px]">
+                      <div className="flex flex-col items-end text-xs">
                         {m.reward.coins > 0 && (
                           <span className={achieved ? "text-yellow-300/50" : "text-yellow-300"}>
                             🪙 {m.reward.coins.toLocaleString()}

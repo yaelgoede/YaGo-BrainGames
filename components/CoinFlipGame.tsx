@@ -19,8 +19,8 @@ export default function CoinFlipGame({
 }: CoinFlipGameProps) {
   return (
     <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-      <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">🪙 Coin Flip</h2>
-      <p className="text-sm text-gray-400">Pick a side — 50/50 shot!</p>
+      <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🪙 Coin Flip</h2>
+      <p className="text-base text-gray-400">Pick a side — 50/50 shot!</p>
 
       {/* Coin display */}
       <div
@@ -94,7 +94,7 @@ export default function CoinFlipGame({
           </div>
           <button
             onClick={onContinue}
-            className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+            className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
           >
             Continue
           </button>

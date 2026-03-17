@@ -22,7 +22,7 @@ export default function HUDProgressIndicators({
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {/* Wheel countdown */}
       <div
-        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
           boardsUntilWheel === 1
             ? "animate-glow-gold border border-gold-500/40 bg-gold-500/10 text-gold-bright"
             : "bg-purple-500/15 border border-purple-500/20 text-purple-300"
@@ -34,10 +34,10 @@ export default function HUDProgressIndicators({
 
       {/* Next milestone */}
       {nextMilestone && (
-        <div className="flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 px-2.5 py-1 text-[10px] text-gray-400">
+        <div className="flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 px-2.5 py-1 text-xs text-gray-400">
           <span>🏆</span>
-          <span className="max-w-[120px] truncate">{nextMilestone.description}</span>
-          <div className="h-1 w-10 overflow-hidden rounded-full bg-black/40">
+          <span className="max-w-[180px] truncate">{nextMilestone.description}</span>
+          <div className="h-1 w-14 overflow-hidden rounded-full bg-black/40">
             <div
               className="h-full rounded-full"
               style={{

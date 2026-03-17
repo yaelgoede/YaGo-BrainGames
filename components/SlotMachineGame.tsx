@@ -22,8 +22,8 @@ export default function SlotMachineGame({
 }: SlotMachineGameProps) {
   return (
     <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-      <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">🎰 Slot Machine</h2>
-      <p className="text-sm text-gray-400">Match symbols to win — triple 7s for the jackpot!</p>
+      <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🎰 Slot Machine</h2>
+      <p className="text-base text-gray-400">Match symbols to win — triple 7s for the jackpot!</p>
 
       {/* Reels */}
       <div
@@ -39,7 +39,7 @@ export default function SlotMachineGame({
           return (
             <div
               key={i}
-              className={`h-20 w-20 overflow-hidden rounded-xl transition-all ${
+              className={`h-24 w-24 overflow-hidden rounded-xl transition-all ${
                 stopped && symbol
                   ? isMatch
                     ? "bg-gold-500/20 shadow-md glow-bloom-gold"
@@ -50,13 +50,13 @@ export default function SlotMachineGame({
               {slotSpinning && !stopped ? (
                 <div className="animate-reel-scroll flex flex-col items-center justify-center">
                   {SCROLL_EMOJIS.concat(SCROLL_EMOJIS).map((sym, j) => (
-                    <div key={j} className="flex h-20 w-20 shrink-0 items-center justify-center text-4xl">
+                    <div key={j} className="flex h-24 w-24 shrink-0 items-center justify-center text-4xl">
                       {SLOT_SYMBOL_EMOJIS[sym]}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className={`flex h-20 w-20 items-center justify-center text-4xl ${stopped ? "animate-reel-land" : ""}`}>
+                <div className={`flex h-24 w-24 items-center justify-center text-4xl ${stopped ? "animate-reel-land" : ""}`}>
                   {stopped && symbol
                     ? SLOT_SYMBOL_EMOJIS[symbol]
                     : "🎰"}
@@ -71,7 +71,7 @@ export default function SlotMachineGame({
       {!slotResult && !slotSpinning && (
         <button
           onClick={onPull}
-          className="gradient-btn animate-gradient w-full max-w-xs rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
+          className="gradient-btn animate-gradient w-full max-w-sm rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-white shadow-lg transition"
         >
           Pull!
         </button>
@@ -121,7 +121,7 @@ export default function SlotMachineGame({
           </div>
           <button
             onClick={onContinue}
-            className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+            className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
           >
             Continue
           </button>

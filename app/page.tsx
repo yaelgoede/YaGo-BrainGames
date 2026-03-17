@@ -1267,8 +1267,8 @@ export default function MemoryQuestPage() {
   const energyPercent = Math.min(100, (energy.amount / MAX_ENERGY) * 100);
   const energyOverflow = energy.amount > MAX_ENERGY;
 
-  const cardHeight = config.cols <= 4 ? "h-20 sm:h-24" : config.cols <= 5 ? "h-16 sm:h-20" : "h-14 sm:h-18";
-  const cardFontSize = config.cols <= 4 ? "text-3xl sm:text-4xl" : config.cols <= 5 ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl";
+  const cardHeight = config.cols <= 4 ? "h-24 sm:h-32" : config.cols <= 5 ? "h-20 sm:h-28" : "h-18 sm:h-24";
+  const cardFontSize = config.cols <= 4 ? "text-4xl sm:text-5xl" : config.cols <= 5 ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl";
 
   // ── JSX ──────────────────────────────────────────────
 
@@ -1276,7 +1276,7 @@ export default function MemoryQuestPage() {
     <div className={`relative pb-8 text-white ${phaseAnimating ? "animate-phase-enter" : ""}`}>
       {/* ── Header ──────────────────────────────────── */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="gradient-text text-glow-purple text-2xl font-extrabold tracking-tight sm:text-3xl">
+        <h1 className="gradient-text text-glow-purple text-3xl font-extrabold tracking-tight sm:text-4xl">
           Memory Quest
         </h1>
         <div className="flex items-center gap-2">
@@ -1327,7 +1327,7 @@ export default function MemoryQuestPage() {
                 style={{ width: `${energyPercent}%` }}
               />
             </div>
-            <p className="mt-0.5 text-xs text-gray-300">
+            <p className="mt-0.5 text-sm text-gray-300">
               {energy.amount}/{MAX_ENERGY}
               {energyOverflow && (
                 <span className="ml-1 font-bold text-gold-bright text-glow-gold">OVERCHARGED</span>
@@ -1339,7 +1339,7 @@ export default function MemoryQuestPage() {
                 <span className="ml-1 text-gray-400">+1 in {timeToNextEnergy}s</span>
               )}
               {!energyOverflow && !isSecondWindAvailable(lastSecondWindTime) && phase === "playing" && (
-                <span className="ml-1 text-green-400/60 text-[10px]">⟳ {Math.ceil(getSecondWindCooldownRemaining(lastSecondWindTime) / 60_000)}m</span>
+                <span className="ml-1 text-green-400/60 text-xs">⟳ {Math.ceil(getSecondWindCooldownRemaining(lastSecondWindTime) / 60_000)}m</span>
               )}
             </p>
           </div>
@@ -1390,24 +1390,24 @@ export default function MemoryQuestPage() {
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
           {/* Lab Display */}
           <div className="flex flex-col items-center gap-2">
-            <div className="hero-glow animate-upgrade-glow glow-bloom flex h-28 w-28 items-center justify-center rounded-3xl bg-purple-500/20 border-2 border-purple-500/30 text-5xl">
+            <div className="hero-glow animate-upgrade-glow glow-bloom flex h-36 w-36 items-center justify-center rounded-3xl bg-purple-500/20 border-2 border-purple-500/30 text-6xl">
               {currentUpgrade.emoji}
             </div>
             <p className="font-bold text-purple-300 text-glow-purple">{currentUpgrade.name}</p>
-            <p className="text-xs text-gray-400 text-number-bold">Lab Level {labLevel}</p>
+            <p className="text-sm text-gray-400 text-number-bold">Lab Level {labLevel}</p>
           </div>
 
           {/* Upgrade Button */}
           <button
             onClick={() => setShowLab((l) => !l)}
-            className="rounded-xl bg-purple-500/20 border-2 border-purple-500/30 px-4 py-2 text-sm font-semibold text-purple-300 transition hover:bg-purple-500/30"
+            className="rounded-xl bg-purple-500/20 border-2 border-purple-500/30 px-4 py-2 text-base font-semibold text-purple-300 transition hover:bg-purple-500/30"
           >
             {showLab ? "Hide Lab" : "Upgrade Lab"}
           </button>
 
           {showLab && (
-            <div className="animate-bounce-in w-full max-w-sm rounded-2xl panel-dark p-4 shadow-lg">
-              <p className="mb-2 text-center text-sm font-semibold text-gray-300">Next Upgrade</p>
+            <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg">
+              <p className="mb-2 text-center text-base font-semibold text-gray-300">Next Upgrade</p>
               <div className="mb-3 flex items-center justify-center gap-3">
                 <span className="text-3xl">{nextUpgrade.emoji}</span>
                 <div>
@@ -1446,15 +1446,15 @@ export default function MemoryQuestPage() {
           {stats.highestRound >= 14 && !showPrestigeConfirm && (
             <button
               onClick={() => setShowPrestigeConfirm(true)}
-              className="rounded-xl bg-yellow-500/20 border-2 border-yellow-500/30 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-500/30"
+              className="rounded-xl bg-yellow-500/20 border-2 border-yellow-500/30 px-4 py-2 text-base font-semibold text-yellow-300 transition hover:bg-yellow-500/30"
             >
               ⭐ Go Prestige
             </button>
           )}
           {showPrestigeConfirm && (
-            <div className="animate-bounce-in w-full max-w-sm rounded-2xl panel-dark p-4 shadow-lg text-center">
-              <p className="mb-2 text-sm font-semibold text-yellow-300">Prestige to Star Rank {starRank + 1}?</p>
-              <p className="mb-3 text-xs text-gray-400">
+            <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg text-center">
+              <p className="mb-2 text-base font-semibold text-yellow-300">Prestige to Star Rank {starRank + 1}?</p>
+              <p className="mb-3 text-sm text-gray-400">
                 Next game starts at Round 1. You keep all coins, upgrades & milestones. Coin rewards permanently boosted by +{(starRank + 1) * 10}%.
               </p>
               <div className="flex gap-2 justify-center">
@@ -1475,7 +1475,7 @@ export default function MemoryQuestPage() {
           )}
 
           {/* Stats */}
-          <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+          <div className="grid w-full max-w-md grid-cols-2 gap-3">
             <StatCard label="Total Matches" value={stats.totalMatches} />
             <StatCard label="Boards Cleared" value={stats.totalBoardsCleared} />
             <StatCard label="Best Combo" value={`${stats.highestCombo}x`} />
@@ -1485,7 +1485,7 @@ export default function MemoryQuestPage() {
           <div className="divider-ornate" />
 
           {highScore > 0 && (
-            <p className="text-sm text-gold-400 text-glow-gold">
+            <p className="text-base text-gold-400 text-glow-gold">
               High Score: <span className="font-bold text-number-bold">{highScore}</span> matches in one run
             </p>
           )}
@@ -1493,11 +1493,11 @@ export default function MemoryQuestPage() {
           {/* Start Button */}
           <button
             onClick={start}
-            className="gradient-btn-gold glow-bloom-gold animate-gradient w-full max-w-xs rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-purple-900 shadow-lg transition"
+            className="gradient-btn-gold glow-bloom-gold animate-gradient w-full max-w-sm rounded-2xl bg-[length:200%_200%] py-4 text-xl font-extrabold text-purple-900 shadow-lg transition"
           >
             Start Quest
           </button>
-          <p className="text-xs text-gray-500">or press Enter</p>
+          <p className="text-sm text-gray-500">or press Enter</p>
         </div>
       )}
 
@@ -1508,13 +1508,13 @@ export default function MemoryQuestPage() {
           <div className="mb-2 flex justify-end gap-2">
             <button
               onClick={skipBoard}
-              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
+              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
             >
               Skip
             </button>
             <button
               onClick={quit}
-              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
+              className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 text-sm font-medium text-gray-400 transition hover:bg-white/20 hover:text-white"
             >
               Quit
             </button>
@@ -1529,12 +1529,12 @@ export default function MemoryQuestPage() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">{timedEvent.theme.collectibleEmoji}</span>
                 <div>
-                  <p className="text-xs font-bold" style={{ color: timedEvent.theme.color }}>
+                  <p className="text-sm font-bold" style={{ color: timedEvent.theme.color }}>
                     {timedEvent.theme.name}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-sm text-gray-400">
                     <span
-                      className="mr-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
+                      className="mr-1 inline-block rounded-full px-1.5 py-0.5 text-xs font-bold text-white"
                       style={{ backgroundColor: TIER_COLORS[timedEvent.tier] }}
                     >
                       {tierLabel(timedEvent.tier)}
@@ -1555,7 +1555,7 @@ export default function MemoryQuestPage() {
                     />
                   </div>
                 </div>
-                <span className="text-xs font-bold text-gray-300">
+                <span className="text-sm font-bold text-gray-300">
                   {timedEvent.collected}/{timedEvent.target}
                 </span>
               </div>
@@ -1565,7 +1565,7 @@ export default function MemoryQuestPage() {
           {/* Match size indicator */}
           {matchSize > 2 && (
             <div className="mb-3 text-center">
-              <span className="animate-bounce-in inline-block rounded-full bg-purple-600 px-4 py-1 text-sm font-bold text-white shadow-md">
+              <span className="animate-bounce-in inline-block rounded-full bg-purple-600 px-4 py-1 text-base font-bold text-white shadow-md">
                 Match {matchSize}!
               </span>
             </div>
@@ -1575,7 +1575,7 @@ export default function MemoryQuestPage() {
           <div
             ref={gridRef}
             className="relative mx-auto grid gap-2"
-            style={{ gridTemplateColumns: `repeat(${config.cols}, 1fr)`, maxWidth: `${config.cols * 80}px` }}
+            style={{ gridTemplateColumns: `repeat(${config.cols}, 1fr)`, maxWidth: `${config.cols * 110}px` }}
           >
             {cards.map((card, i) => {
               const isFlipped = card.flipped || card.matched;
@@ -1623,7 +1623,7 @@ export default function MemoryQuestPage() {
                   </div>
                   {/* Collectible badge */}
                   {collectibleIndices.has(i) && !card.matched && timedEvent && (
-                    <div className="animate-collectible-sparkle pointer-events-none absolute -right-1 -top-1 z-10 text-sm">
+                    <div className="animate-collectible-sparkle pointer-events-none absolute -right-1 -top-1 z-10 text-base">
                       {timedEvent.theme.collectibleEmoji}
                     </div>
                   )}
@@ -1660,7 +1660,7 @@ export default function MemoryQuestPage() {
               <span className="animate-energy-pulse text-3xl">⚡</span>
               <p className="font-bold text-purple-300">Waiting for energy...</p>
               {timeToNextEnergy > 0 && (
-                <p className="text-sm text-gray-400">+1 in {timeToNextEnergy}s</p>
+                <p className="text-base text-gray-400">+1 in {timeToNextEnergy}s</p>
               )}
             </div>
           )}
@@ -1691,7 +1691,7 @@ export default function MemoryQuestPage() {
                 <p className="font-bold text-purple-300">
                   {getBoardConfig(round + 1).rows}x{getBoardConfig(round + 1).cols} board
                   {getMatchSize(round + 1) > 2 && (
-                    <span className="ml-2 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 text-xs">
+                    <span className="ml-2 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 text-sm">
                       Match {getMatchSize(round + 1)}
                     </span>
                   )}
@@ -1705,8 +1705,8 @@ export default function MemoryQuestPage() {
       {/* ── LUCKY WHEEL PHASE ─────────────────────── */}
       {phase === "event-wheel" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">Lucky Wheel!</h2>
-          <p className="text-sm text-gray-400">Spin to win coins & energy</p>
+          <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">Lucky Wheel!</h2>
+          <p className="text-base text-gray-400">Spin to win coins & energy</p>
 
           {/* Wheel container */}
           <div className="relative">
@@ -1717,7 +1717,7 @@ export default function MemoryQuestPage() {
 
             {/* Wheel */}
             <div
-              className="relative h-64 w-64 rounded-full border-4 border-gold-premium shadow-xl glow-bloom-gold sm:h-72 sm:w-72"
+              className="relative h-72 w-72 rounded-full border-4 border-gold-premium shadow-xl glow-bloom-gold sm:h-80 sm:w-80"
               style={{
                 transform: `rotate(${wheelRotation}deg)`,
                 transition: wheelSpinning
@@ -1788,7 +1788,7 @@ export default function MemoryQuestPage() {
             <button
               onClick={handleWheelSpin}
               disabled={wheelSpinning}
-              className={`w-full max-w-xs rounded-2xl py-4 text-xl font-extrabold text-white shadow-lg transition ${
+              className={`w-full max-w-sm rounded-2xl py-4 text-xl font-extrabold text-white shadow-lg transition ${
                 wheelSpinning
                   ? "cursor-not-allowed bg-gray-700 text-gray-400"
                   : "gradient-btn animate-gradient bg-[length:200%_200%]"
@@ -1827,7 +1827,7 @@ export default function MemoryQuestPage() {
                   </div>
                   <button
                     onClick={handleWheelContinue}
-                    className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+                    className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
                   >
                     Continue
                   </button>
@@ -1844,10 +1844,10 @@ export default function MemoryQuestPage() {
           <div className="flex items-center gap-2">
             <span className="text-3xl">{timedEvent.theme.collectibleEmoji}</span>
             <div>
-              <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">Scratch Card!</h2>
-              <p className="text-xs text-gray-400">
+              <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">Scratch Card!</h2>
+              <p className="text-sm text-gray-400">
                 <span
-                  className="mr-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
+                  className="mr-1 inline-block rounded-full px-1.5 py-0.5 text-xs font-bold text-white"
                   style={{ backgroundColor: TIER_COLORS[timedEvent.tier] }}
                 >
                   {tierLabel(timedEvent.tier)}
@@ -1860,7 +1860,7 @@ export default function MemoryQuestPage() {
           {/* 3x3 Scratch Grid */}
           <div
             className="mx-auto grid gap-2"
-            style={{ gridTemplateColumns: "repeat(3, 1fr)", maxWidth: "240px" }}
+            style={{ gridTemplateColumns: "repeat(3, 1fr)", maxWidth: "320px" }}
           >
             {scratchCells.map((cell, i) => {
               const isWinner = scratchPrize && cell.revealed && cell.symbol === scratchPrize.symbol;
@@ -1869,7 +1869,7 @@ export default function MemoryQuestPage() {
                   key={i}
                   onClick={() => handleScratchReveal(i)}
                   disabled={cell.revealed || scratchFinished}
-                  className={`relative flex h-20 w-20 items-center justify-center rounded-xl text-3xl transition-all ${
+                  className={`relative flex h-24 w-24 items-center justify-center rounded-xl text-3xl transition-all ${
                     cell.revealed
                       ? isWinner
                         ? "animate-scratch-win border-2 border-gold-400 bg-gold-500/10"
@@ -1907,7 +1907,7 @@ export default function MemoryQuestPage() {
               )}
               <button
                 onClick={handleScratchContinue}
-                className="gradient-btn w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
+                className="gradient-btn w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-white shadow-lg"
               >
                 Continue
               </button>
@@ -1915,7 +1915,7 @@ export default function MemoryQuestPage() {
           )}
 
           {!scratchFinished && (
-            <p className="text-xs text-gray-400">Tap cells to reveal symbols</p>
+            <p className="text-sm text-gray-400">Tap cells to reveal symbols</p>
           )}
         </div>
       )}
@@ -1923,10 +1923,10 @@ export default function MemoryQuestPage() {
       {/* ── SHOP PHASE ────────────────────────────── */}
       {phase === "shop" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          <h2 className="gradient-gold text-glow-gold text-2xl font-extrabold">🏪 Shop</h2>
-          <p className="text-sm text-gray-400">Spend coins on mini games for a chance to win big!</p>
+          <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">🏪 Shop</h2>
+          <p className="text-base text-gray-400">Spend coins on mini games for a chance to win big!</p>
 
-          <div className="flex w-full max-w-sm flex-col gap-4">
+          <div className="flex w-full max-w-md flex-col gap-4">
             {SHOP_ITEMS.map((item) => {
               const affordable = canAffordShopItem(coins, item);
               return (
@@ -1940,7 +1940,7 @@ export default function MemoryQuestPage() {
                     <span className="text-3xl">{item.emoji}</span>
                     <div className="flex-1">
                       <p className="font-bold text-white">{item.name}</p>
-                      <p className="text-xs text-gray-400">{item.description}</p>
+                      <p className="text-sm text-gray-400">{item.description}</p>
                     </div>
                     <span className="rounded-full coin-badge px-3 py-1 text-sm font-bold text-yellow-300">
                       🪙 {item.cost}
@@ -1964,7 +1964,7 @@ export default function MemoryQuestPage() {
 
           <button
             onClick={handleShopBack}
-            className="rounded-xl bg-white/10 border border-white/20 px-6 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/20"
+            className="rounded-xl bg-white/10 border border-white/20 px-6 py-2 text-base font-medium text-gray-300 transition hover:bg-white/20"
           >
             Back to Menu
           </button>
@@ -2009,7 +2009,7 @@ export default function MemoryQuestPage() {
           <div className="reward-frame rounded-3xl mx-4 px-8 py-8 flex flex-col items-center gap-4">
           <p className="text-5xl">🧠</p>
           <h2 className="gradient-gold text-glow-gold text-3xl font-extrabold">Session Summary</h2>
-          <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+          <div className="grid w-full max-w-md grid-cols-2 gap-3">
             <StatCard label="Matches" value={sessionScore} highlight />
             <StatCard label="Rounds" value={round} />
             <StatCard label="Coins Earned" value={sessionCoins} />
@@ -2020,7 +2020,7 @@ export default function MemoryQuestPage() {
           )}
           <button
             onClick={backToMenu}
-            className="gradient-btn-gold mt-4 w-full max-w-xs rounded-2xl py-3 text-lg font-bold text-purple-900 shadow-lg"
+            className="gradient-btn-gold mt-4 w-full max-w-sm rounded-2xl py-3 text-lg font-bold text-purple-900 shadow-lg"
           >
             Back to Menu
           </button>
@@ -2125,7 +2125,7 @@ export default function MemoryQuestPage() {
             className="animate-milestone pointer-events-auto rounded-2xl border-2 border-gold-premium bg-navy-800/95 backdrop-blur-md px-4 py-3 shadow-xl"
           >
             <p className="text-sm font-bold text-purple-300">🏆 {t.milestone.description}</p>
-            <p className="text-xs text-yellow-300 text-glow-gold">
+            <p className="text-sm text-yellow-300 text-glow-gold">
               +{t.milestone.reward.coins} coins, +{t.milestone.reward.energy} energy
             </p>
           </div>
@@ -2152,8 +2152,8 @@ function StatCard({
         highlight ? "bg-purple-500/20 border border-purple-500/30" : "panel-dark"
       }`}
     >
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className={`text-lg font-bold text-number-bold ${highlight ? "text-purple-300" : "text-white"}`}>
+      <p className="text-sm text-gray-400">{label}</p>
+      <p className={`text-xl font-bold text-number-bold ${highlight ? "text-purple-300" : "text-white"}`}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
     </div>
