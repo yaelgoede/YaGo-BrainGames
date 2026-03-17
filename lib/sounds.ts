@@ -11,6 +11,9 @@ function getContext(): AudioContext | null {
       return null;
     }
   }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch(() => {});
+  }
   return audioCtx;
 }
 
@@ -164,5 +167,9 @@ const soundMap: Record<SoundType, () => void> = {
 
 export function playSound(type: SoundType): void {
   if (isMuted()) return;
-  soundMap[type]();
+  try {
+    soundMap[type]();
+  } catch {
+    // Silently ignore — iOS Safari may suspend AudioContext
+  }
 }

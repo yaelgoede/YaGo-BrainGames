@@ -59,7 +59,7 @@ export default function SlotMachineGame({
   // Auto-pull after reset (when slotResult becomes null during auto-play)
   useEffect(() => {
     if (autoPlay && !slotResult && !slotSpinning && hasStartedRef.current) {
-      const t = setTimeout(() => onPull(), 100);
+      const t = setTimeout(() => onPull(), 300);
       return () => clearTimeout(t);
     }
     if (slotResult) hasStartedRef.current = true;
