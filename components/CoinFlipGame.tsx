@@ -26,6 +26,10 @@ export default function CoinFlipGame({
   const [autoChoice, setAutoChoice] = useState<CoinFlipChoice | null>(null);
   const [sessionNet, setSessionNet] = useState(0);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onPlayAgainRef = useRef(onPlayAgain);
+  onPlayAgainRef.current = onPlayAgain;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
   const COST = 50;
 
   const canAfford = coins >= COST;
@@ -45,21 +49,21 @@ export default function CoinFlipGame({
         return;
       }
       autoTimerRef.current = setTimeout(() => {
-        onPlayAgain();
+        onPlayAgainRef.current();
       }, 1500);
       return () => {
         if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
       };
     }
-  }, [autoPlay, coinFlipResult, coinFlipAnimating, canAfford, autoChoice, onPlayAgain]);
+  }, [autoPlay, coinFlipResult, coinFlipAnimating, canAfford, autoChoice]);
 
   // Auto-pick after reset (when coinFlipResult becomes null during auto-play)
   useEffect(() => {
     if (autoPlay && !coinFlipResult && !coinFlipAnimating && autoChoice) {
-      const t = setTimeout(() => onPick(autoChoice), 100);
+      const t = setTimeout(() => onPickRef.current(autoChoice), 300);
       return () => clearTimeout(t);
     }
-  }, [autoPlay, coinFlipResult, coinFlipAnimating, autoChoice, onPick]);
+  }, [autoPlay, coinFlipResult, coinFlipAnimating, autoChoice]);
 
   // Cleanup on unmount
   useEffect(() => {

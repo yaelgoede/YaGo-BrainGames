@@ -99,13 +99,13 @@ export function purchaseUpgrade(
 
 
 
-export function computeRegenerated(state: EnergyState): EnergyState {
+export function computeRegenerated(state: EnergyState, regenMs: number = ENERGY_REGEN_MS, maxEnergy: number = MAX_ENERGY): EnergyState {
   const elapsed = Date.now() - state.lastUpdated;
-  const regen = Math.floor(elapsed / ENERGY_REGEN_MS);
+  const regen = Math.floor(elapsed / regenMs);
   if (regen <= 0) return state;
   return {
-    amount: Math.min(MAX_ENERGY, state.amount + regen),
-    lastUpdated: state.lastUpdated + regen * ENERGY_REGEN_MS,
+    amount: Math.min(maxEnergy, state.amount + regen),
+    lastUpdated: state.lastUpdated + regen * regenMs,
   };
 }
 
@@ -126,9 +126,9 @@ export function spendEnergy(state: EnergyState, cost = 1): EnergyState | null {
   return { amount: state.amount - cost, lastUpdated: state.lastUpdated };
 }
 
-export function addEnergy(state: EnergyState, amount: number): EnergyState {
+export function addEnergy(state: EnergyState, amount: number, maxEnergy: number = MAX_ENERGY): EnergyState {
   return {
-    amount: state.amount + amount,
+    amount: Math.min(maxEnergy, state.amount + amount),
     lastUpdated: state.lastUpdated,
   };
 }
@@ -312,25 +312,28 @@ export function getPrestigeMultiplier(starRank: number): number {
   return 1 + starRank * 0.10;
 }
 
-export function calculateMatchReward(combo: number, round: number = 1, starRank: number = 0): {
+export function calculateMatchReward(combo: number, round: number = 1, starRank: number = 0, spBonuses?: StarPathBonuses, labBonuses?: LabBonuses): {
   coins: number;
   energyRefund: number;
 } {
   const bonusIdx = Math.min(combo, COMBO_ENERGY_BONUS.length - 1);
-  const baseRefund = ENERGY_REFUND_PER_MATCH + COMBO_ENERGY_BONUS[bonusIdx];
+  const baseRefund = ENERGY_REFUND_PER_MATCH + COMBO_ENERGY_BONUS[bonusIdx] + (spBonuses?.matchEnergyBonus ?? 0) + (labBonuses?.matchEnergyRefund ?? 0);
   // Late-game scaling: +1 energy per match starting at round 5
   const lateGameBonus = round >= 5 ? Math.floor((round - 4) / 2) + 1 : 0;
   const baseCoins = BASE_COINS_PER_MATCH * Math.max(1, combo);
+  const comboMultiplier = combo > 1 ? (1 + (labBonuses?.comboMultiplier ?? 0)) : 1;
+  const coinMultiplier = getPrestigeMultiplier(starRank) * (1 + (spBonuses?.coinBoostPercent ?? 0) + (labBonuses?.coinMultiplier ?? 0));
   return {
-    coins: Math.floor(baseCoins * getPrestigeMultiplier(starRank)),
+    coins: Math.floor(baseCoins * coinMultiplier * comboMultiplier),
     energyRefund: baseRefund + lateGameBonus + MATCH_PAIR_ENERGY_BONUS,
   };
 }
 
-export function calculateBoardClearReward(round: number, starRank: number = 0): { coins: number; energy: number } {
-  const baseCoins = BOARD_CLEAR_BONUS + round * 25;
+export function calculateBoardClearReward(round: number, starRank: number = 0, spBonuses?: StarPathBonuses, labBonuses?: LabBonuses): { coins: number; energy: number } {
+  const baseCoins = BOARD_CLEAR_BONUS + round * 25 + (spBonuses?.boardClearCoinBonus ?? 0) + (labBonuses?.boardClearCoinBonus ?? 0);
+  const coinMultiplier = getPrestigeMultiplier(starRank) * (1 + (spBonuses?.coinBoostPercent ?? 0) + (labBonuses?.coinMultiplier ?? 0));
   return {
-    coins: Math.floor(baseCoins * getPrestigeMultiplier(starRank)),
+    coins: Math.floor(baseCoins * coinMultiplier),
     energy: Math.min(8, 3 + Math.floor(round / 2)),
   };
 }
@@ -411,4 +414,317 @@ export function loadStarRank(): number {
 
 export function saveStarRank(rank: number): void {
   store("mq-star-rank", rank);
+}
+
+// ── Star Path (Infinite Prestige Leveling — Coin Sink) ──
+
+export type StarPathBonusType =
+  | "coinBoost"
+  | "energyRegen"
+  | "matchEnergy"
+  | "boardClearBonus"
+  | "maxEnergy";
+
+export interface StarPathLevel {
+  level: number;
+  name: string;
+  emoji: string;
+  cost: number;
+  bonusType: StarPathBonusType;
+  bonusLabel: string;
+}
+
+export interface StarPathBonuses {
+  coinBoostPercent: number;      // e.g. 0.06 = +6%
+  energyRegenReduction: number;  // ms to subtract from ENERGY_REGEN_MS (capped)
+  matchEnergyBonus: number;      // added to refund
+  boardClearCoinBonus: number;   // added to base clear reward
+  maxEnergyBonus: number;        // added to MAX_ENERGY
+}
+
+const STAR_PATH_BONUS_CYCLE: { type: StarPathBonusType; value: number; label: string; emoji: string }[] = [
+  { type: "coinBoost",       value: 0.02,  label: "+2% Coin Boost",     emoji: "🪙" },
+  { type: "energyRegen",     value: 500,   label: "-0.5s Energy Regen", emoji: "⏱️" },
+  { type: "matchEnergy",     value: 1,     label: "+1 Match Energy",    emoji: "⚡" },
+  { type: "boardClearBonus", value: 15,    label: "+15 Clear Bonus",    emoji: "🎯" },
+  { type: "maxEnergy",       value: 1,     label: "+1 Max Energy",      emoji: "🔋" },
+];
+
+const STAR_NAMES = [
+  "Nova", "Lunar", "Solar", "Astral", "Cosmic",
+  "Radiant", "Stellar", "Celestial", "Galactic", "Eternal",
+];
+const STAR_SUFFIXES = [
+  "Spark", "Surge", "Pulse", "Bloom", "Flare",
+  "Glow", "Burst", "Wave", "Core", "Crest",
+];
+
+export function getStarPathLevel(level: number): StarPathLevel {
+  const nameIdx = (level - 1) % STAR_NAMES.length;
+  const suffIdx = Math.floor((level - 1) / STAR_NAMES.length) % STAR_SUFFIXES.length;
+  const tier = Math.floor((level - 1) / (STAR_NAMES.length * STAR_SUFFIXES.length));
+  const tierSuffix = tier > 0 ? ` ${tier + 1}` : "";
+  const bonus = STAR_PATH_BONUS_CYCLE[(level - 1) % STAR_PATH_BONUS_CYCLE.length];
+  return {
+    level,
+    name: `${STAR_NAMES[nameIdx]} ${STAR_SUFFIXES[suffIdx]}${tierSuffix}`,
+    emoji: bonus.emoji,
+    cost: Math.floor(500 * Math.pow(2, level - 1)),
+    bonusType: bonus.type,
+    bonusLabel: bonus.label,
+  };
+}
+
+export function getStarPathBonuses(currentLevel: number): StarPathBonuses {
+  const bonuses: StarPathBonuses = {
+    coinBoostPercent: 0,
+    energyRegenReduction: 0,
+    matchEnergyBonus: 0,
+    boardClearCoinBonus: 0,
+    maxEnergyBonus: 0,
+  };
+  for (let i = 1; i <= currentLevel; i++) {
+    const cycle = STAR_PATH_BONUS_CYCLE[(i - 1) % STAR_PATH_BONUS_CYCLE.length];
+    switch (cycle.type) {
+      case "coinBoost":       bonuses.coinBoostPercent += cycle.value; break;
+      case "energyRegen":     bonuses.energyRegenReduction += cycle.value; break;
+      case "matchEnergy":     bonuses.matchEnergyBonus += cycle.value; break;
+      case "boardClearBonus": bonuses.boardClearCoinBonus += cycle.value; break;
+      case "maxEnergy":       bonuses.maxEnergyBonus += cycle.value; break;
+    }
+  }
+  // Cap regen reduction so regen never goes below 30s
+  bonuses.energyRegenReduction = Math.min(bonuses.energyRegenReduction, ENERGY_REGEN_MS - 30_000);
+  return bonuses;
+}
+
+export function getStarPathBonusSummary(currentLevel: number): { emoji: string; label: string }[] {
+  const bonuses = getStarPathBonuses(currentLevel);
+  const summary: { emoji: string; label: string }[] = [];
+  if (bonuses.coinBoostPercent > 0) summary.push({ emoji: "🪙", label: `+${Math.round(bonuses.coinBoostPercent * 100)}% coins` });
+  if (bonuses.energyRegenReduction > 0) summary.push({ emoji: "⏱️", label: `-${(bonuses.energyRegenReduction / 1000).toFixed(1)}s regen` });
+  if (bonuses.matchEnergyBonus > 0) summary.push({ emoji: "⚡", label: `+${bonuses.matchEnergyBonus} match energy` });
+  if (bonuses.boardClearCoinBonus > 0) summary.push({ emoji: "🎯", label: `+${bonuses.boardClearCoinBonus} clear bonus` });
+  if (bonuses.maxEnergyBonus > 0) summary.push({ emoji: "🔋", label: `+${bonuses.maxEnergyBonus} max energy` });
+  return summary;
+}
+
+export function canAffordStarPath(coins: number, currentLevel: number): boolean {
+  const next = getStarPathLevel(currentLevel + 1);
+  return coins >= next.cost;
+}
+
+export function purchaseStarPath(
+  coins: number,
+  currentLevel: number,
+): { newCoins: number; newLevel: number } | null {
+  const next = getStarPathLevel(currentLevel + 1);
+  if (coins < next.cost) return null;
+  return { newCoins: coins - next.cost, newLevel: currentLevel + 1 };
+}
+
+export function loadStarPathLevel(): number {
+  return safe<number>("mq-star-path-level", 0);
+}
+
+export function saveStarPathLevel(level: number): void {
+  store("mq-star-path-level", level);
+}
+
+export function getEffectiveMaxEnergy(bonuses: StarPathBonuses, labBonuses?: LabBonuses): number {
+  return MAX_ENERGY + bonuses.maxEnergyBonus + (labBonuses?.energyCapacity ?? 0);
+}
+
+export function getEffectiveRegenMs(bonuses: StarPathBonuses, labBonuses?: LabBonuses): number {
+  return Math.max(20_000, ENERGY_REGEN_MS - bonuses.energyRegenReduction - (labBonuses?.regenReduction ?? 0));
+}
+
+// ── Lab Equipment Research System ─────────────────────
+
+export type EquipmentId = "scanner" | "amplifier" | "reactor" | "processor" | "matrix" | "beacon";
+
+export interface EquipmentCategory {
+  id: EquipmentId;
+  name: string;
+  emoji: string;
+  bonusLabel: (level: number) => string;
+}
+
+export interface ResearchState {
+  activeResearch: EquipmentId | null;
+  startedAt: number;
+  baseDurationMs: number;
+  playAcceleration: number;
+}
+
+export interface LabState {
+  levels: Record<EquipmentId, number>;
+  research: ResearchState;
+}
+
+export interface LabBonuses {
+  coinMultiplier: number;
+  comboMultiplier: number;
+  energyCapacity: number;
+  regenReduction: number;
+  matchEnergyRefund: number;
+  boardClearCoinBonus: number;
+}
+
+export const EQUIPMENT_CATEGORIES: EquipmentCategory[] = [
+  { id: "scanner",   name: "Scanner",   emoji: "🔬", bonusLabel: (l) => `+${l * 3}% coins` },
+  { id: "amplifier", name: "Amplifier", emoji: "⚡", bonusLabel: (l) => `+${l * 5}% combo` },
+  { id: "reactor",   name: "Reactor",   emoji: "🔋", bonusLabel: (l) => `+${l * 2} max energy` },
+  { id: "processor", name: "Processor", emoji: "⏱️", bonusLabel: (l) => `-${(l * 0.8).toFixed(1)}s regen` },
+  { id: "matrix",    name: "Matrix",    emoji: "🧩", bonusLabel: (l) => `+${l} match energy` },
+  { id: "beacon",    name: "Beacon",    emoji: "🎯", bonusLabel: (l) => `+${l * 20} clear bonus` },
+];
+
+const EQUIPMENT_IDS: EquipmentId[] = ["scanner", "amplifier", "reactor", "processor", "matrix", "beacon"];
+
+export function getEquipmentInfo(id: EquipmentId, level: number): { name: string; emoji: string } {
+  const cat = EQUIPMENT_CATEGORIES.find((c) => c.id === id)!;
+  if (level === 0) return { name: cat.name, emoji: cat.emoji };
+  const prefixIdx = (level - 1) % PREFIXES.length;
+  const tier = Math.floor((level - 1) / PREFIXES.length);
+  const tierSuffix = tier > 0 ? ` Mk.${tier + 1}` : "";
+  return {
+    name: `${PREFIXES[prefixIdx]} ${cat.name}${tierSuffix}`,
+    emoji: cat.emoji,
+  };
+}
+
+export function getResearchCost(targetLevel: number): number {
+  return Math.floor(150 * Math.pow(1.6, targetLevel - 1));
+}
+
+export function getResearchDuration(targetLevel: number): number {
+  return Math.floor(5 * 60_000 * Math.pow(1.4, targetLevel - 1));
+}
+
+export function getRushCost(remainingMs: number): number {
+  return Math.max(10, Math.floor(remainingMs / 6000));
+}
+
+export function createDefaultLabState(): LabState {
+  return {
+    levels: { scanner: 0, amplifier: 0, reactor: 0, processor: 0, matrix: 0, beacon: 0 },
+    research: { activeResearch: null, startedAt: 0, baseDurationMs: 0, playAcceleration: 0 },
+  };
+}
+
+export function loadLabState(): LabState {
+  return safe<LabState>("mq-lab-state", createDefaultLabState());
+}
+
+export function saveLabState(state: LabState): void {
+  store("mq-lab-state", state);
+}
+
+export function startResearch(
+  state: LabState,
+  id: EquipmentId,
+  coins: number,
+): { newState: LabState; newCoins: number } | null {
+  if (state.research.activeResearch) return null;
+  const targetLevel = state.levels[id] + 1;
+  const cost = getResearchCost(targetLevel);
+  if (coins < cost) return null;
+  return {
+    newState: {
+      ...state,
+      research: {
+        activeResearch: id,
+        startedAt: Date.now(),
+        baseDurationMs: getResearchDuration(targetLevel),
+        playAcceleration: 0,
+      },
+    },
+    newCoins: coins - cost,
+  };
+}
+
+export function accelerateResearch(state: LabState, reductionMs: number): LabState {
+  if (!state.research.activeResearch) return state;
+  return {
+    ...state,
+    research: {
+      ...state.research,
+      playAcceleration: state.research.playAcceleration + reductionMs,
+    },
+  };
+}
+
+export function getResearchTimeRemaining(state: LabState): number {
+  if (!state.research.activeResearch) return 0;
+  const elapsed = Date.now() - state.research.startedAt;
+  return Math.max(0, state.research.baseDurationMs - elapsed - state.research.playAcceleration);
+}
+
+export function getResearchProgress(state: LabState): number {
+  if (!state.research.activeResearch || state.research.baseDurationMs === 0) return 0;
+  const remaining = getResearchTimeRemaining(state);
+  return Math.min(1, 1 - remaining / state.research.baseDurationMs);
+}
+
+export function isResearchComplete(state: LabState): boolean {
+  if (!state.research.activeResearch) return false;
+  return getResearchTimeRemaining(state) <= 0;
+}
+
+export function completeResearch(state: LabState): LabState {
+  const id = state.research.activeResearch;
+  if (!id) return state;
+  return {
+    levels: { ...state.levels, [id]: state.levels[id] + 1 },
+    research: { activeResearch: null, startedAt: 0, baseDurationMs: 0, playAcceleration: 0 },
+  };
+}
+
+export function rushResearch(
+  state: LabState,
+  coins: number,
+): { newState: LabState; newCoins: number } | null {
+  if (!state.research.activeResearch) return null;
+  const remaining = getResearchTimeRemaining(state);
+  if (remaining <= 0) return null;
+  const cost = getRushCost(remaining);
+  if (coins < cost) return null;
+  return {
+    newState: completeResearch(state),
+    newCoins: coins - cost,
+  };
+}
+
+export function getLabBonuses(state: LabState): LabBonuses {
+  const bonuses: LabBonuses = {
+    coinMultiplier: 0,
+    comboMultiplier: 0,
+    energyCapacity: 0,
+    regenReduction: 0,
+    matchEnergyRefund: 0,
+    boardClearCoinBonus: 0,
+  };
+  bonuses.coinMultiplier = state.levels.scanner * 0.03;
+  bonuses.comboMultiplier = state.levels.amplifier * 0.05;
+  bonuses.energyCapacity = state.levels.reactor * 2;
+  bonuses.regenReduction = state.levels.processor * 800;
+  bonuses.matchEnergyRefund = state.levels.matrix;
+  bonuses.boardClearCoinBonus = state.levels.beacon * 20;
+  return bonuses;
+}
+
+export function getTotalLabLevel(state: LabState): number {
+  return EQUIPMENT_IDS.reduce((sum, id) => sum + state.levels[id], 0);
+}
+
+export function getLabBonusSummary(state: LabState): { emoji: string; label: string }[] {
+  const summary: { emoji: string; label: string }[] = [];
+  for (const cat of EQUIPMENT_CATEGORIES) {
+    const level = state.levels[cat.id];
+    if (level > 0) {
+      summary.push({ emoji: cat.emoji, label: cat.bonusLabel(level) });
+    }
+  }
+  return summary;
 }

@@ -29,6 +29,10 @@ export default function SlotMachineGame({
   const [sessionNet, setSessionNet] = useState(0);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasStartedRef = useRef(false);
+  const onPlayAgainRef = useRef(onPlayAgain);
+  onPlayAgainRef.current = onPlayAgain;
+  const onPullRef = useRef(onPull);
+  onPullRef.current = onPull;
   const COST = 300;
 
   const canAfford = coins >= COST;
@@ -48,22 +52,22 @@ export default function SlotMachineGame({
         return;
       }
       autoTimerRef.current = setTimeout(() => {
-        onPlayAgain();
+        onPlayAgainRef.current();
       }, 1500);
       return () => {
         if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
       };
     }
-  }, [autoPlay, slotResult, slotSpinning, canAfford, onPlayAgain]);
+  }, [autoPlay, slotResult, slotSpinning, canAfford]);
 
   // Auto-pull after reset (when slotResult becomes null during auto-play)
   useEffect(() => {
     if (autoPlay && !slotResult && !slotSpinning && hasStartedRef.current) {
-      const t = setTimeout(() => onPull(), 300);
+      const t = setTimeout(() => onPullRef.current(), 300);
       return () => clearTimeout(t);
     }
     if (slotResult) hasStartedRef.current = true;
-  }, [autoPlay, slotResult, slotSpinning, onPull]);
+  }, [autoPlay, slotResult, slotSpinning]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -34,14 +34,14 @@ export default function AchievementsPage({ stats, achievedMilestones }: Achievem
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 240px)" }}>
+      <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "calc(100dvh - 240px)" }}>
         {CATEGORY_ORDER.map((statKey) => {
           const meta = CATEGORY_META[statKey];
           const milestones = categories[statKey];
           if (!milestones.length) return null;
 
           return (
-            <div key={statKey} className="rounded-2xl panel-dark p-4">
+            <div key={statKey} className="rounded-2xl bg-white/5 border border-white/10 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-xl">{meta.emoji}</span>
                 <h3 className="font-bold text-purple-300">{meta.label}</h3>

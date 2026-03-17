@@ -192,6 +192,34 @@ body::before {
   50% { box-shadow: 0 0 25px rgba(124, 58, 237, 0.6), 0 0 50px rgba(168, 85, 247, 0.3); }
 }
 
+@keyframes research-progress {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4); }
+}
+
+@keyframes research-complete {
+  0% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
+  50% { transform: scale(1.15); box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(212, 175, 55, 0.3); }
+  100% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
+}
+
+@keyframes equipment-unlock {
+  0% { transform: scale(0.8) rotate(-5deg); opacity: 0.5; }
+  50% { transform: scale(1.2) rotate(3deg); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes research-bubble {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-research-progress { animation: research-progress 2s ease-in-out infinite; }
+.animate-research-complete { animation: research-complete 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-equipment-unlock  { animation: equipment-unlock 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-research-bubble   { animation: research-bubble 1.5s ease-in-out infinite; }
+
 @keyframes bounce-in {
   0% { opacity: 0; transform: scale(0.3); }
   50% { opacity: 1; transform: scale(1.08); }

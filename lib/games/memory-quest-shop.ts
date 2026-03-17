@@ -118,9 +118,9 @@ export function playCoinFlip(choice: CoinFlipChoice): CoinFlipResult {
 function generateCoinFlipReward(): PackReward {
   // 60% coins, 40% energy
   if (Math.random() < 0.6) {
-    return { coins: randInt(60, 120), energy: 0, triggerEvent: false };
+    return { coins: randInt(120, 240), energy: 0, triggerEvent: false };
   }
-  return { coins: 0, energy: randInt(3, 8), triggerEvent: false };
+  return { coins: 0, energy: randInt(6, 16), triggerEvent: false };
 }
 
 // ── Treasure Chest Logic ───────────────────────────────
@@ -137,24 +137,24 @@ function generateChestReward(rarity: ChestRarity): PackReward {
     case "common": {
       const isCoins = Math.random() < 0.6;
       return {
-        coins: isCoins ? randInt(50, 100) : 0,
-        energy: isCoins ? 0 : randInt(3, 5),
+        coins: isCoins ? randInt(100, 200) : 0,
+        energy: isCoins ? 0 : randInt(6, 10),
         triggerEvent: false,
       };
     }
     case "rare": {
       const isCoins = Math.random() < 0.5;
       return {
-        coins: isCoins ? randInt(120, 200) : 0,
-        energy: isCoins ? 0 : randInt(8, 12),
+        coins: isCoins ? randInt(240, 400) : 0,
+        energy: isCoins ? 0 : randInt(16, 24),
         triggerEvent: false,
       };
     }
     case "legendary": {
       const isCoins = Math.random() < 0.5;
       return {
-        coins: isCoins ? randInt(250, 400) : 0,
-        energy: isCoins ? 0 : randInt(15, 25),
+        coins: isCoins ? randInt(500, 800) : 0,
+        energy: isCoins ? 0 : randInt(30, 50),
         triggerEvent: Math.random() < 0.5,
       };
     }
@@ -205,26 +205,26 @@ function slotReward(label: string): PackReward {
   switch (label) {
     case "jackpot":
       return {
-        coins: randInt(800, 1200),
-        energy: 25,
+        coins: randInt(1600, 2400),
+        energy: 50,
         triggerEvent: true,
       };
     case "triple":
       return {
-        coins: randInt(400, 600),
-        energy: randInt(0, 5) > 3 ? randInt(20, 30) : 0,
+        coins: randInt(800, 1200),
+        energy: randInt(0, 5) > 3 ? randInt(40, 60) : 0,
         triggerEvent: false,
       };
     case "double":
       return {
-        coins: randInt(150, 250),
-        energy: Math.random() < 0.3 ? randInt(8, 15) : 0,
+        coins: randInt(300, 500),
+        energy: Math.random() < 0.3 ? randInt(16, 30) : 0,
         triggerEvent: false,
       };
     case "bust":
       return { coins: 0, energy: 0, triggerEvent: false };
     default: // none
-      return { coins: randInt(25, 50), energy: 0, triggerEvent: false };
+      return { coins: randInt(50, 100), energy: 0, triggerEvent: false };
   }
 }
 

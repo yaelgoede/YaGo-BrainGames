@@ -24,6 +24,10 @@ export default function TreasureChestGame({
   const [autoPlay, setAutoPlay] = useState(false);
   const [sessionNet, setSessionNet] = useState(0);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onPlayAgainRef = useRef(onPlayAgain);
+  onPlayAgainRef.current = onPlayAgain;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
   const COST = 150;
 
   const canAfford = coins >= COST;
@@ -43,13 +47,13 @@ export default function TreasureChestGame({
         return;
       }
       autoTimerRef.current = setTimeout(() => {
-        onPlayAgain();
+        onPlayAgainRef.current();
       }, 1500);
       return () => {
         if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
       };
     }
-  }, [autoPlay, openedIndex, chests, canAfford, onPlayAgain]);
+  }, [autoPlay, openedIndex, chests, canAfford]);
 
   // Auto-pick after reset (when chests refresh during auto-play)
   useEffect(() => {
@@ -57,11 +61,11 @@ export default function TreasureChestGame({
       const t = setTimeout(() => {
         // Pick a random chest
         const idx = Math.floor(Math.random() * chests.length);
-        onPick(idx);
-      }, 100);
+        onPickRef.current(idx);
+      }, 300);
       return () => clearTimeout(t);
     }
-  }, [autoPlay, openedIndex, chests, onPick]);
+  }, [autoPlay, openedIndex, chests]);
 
   // Cleanup on unmount
   useEffect(() => {

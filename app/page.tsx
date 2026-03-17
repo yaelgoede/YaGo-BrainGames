@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   type EnergyState,
   type PlayerStats,
   type Milestone,
   MAX_ENERGY,
-  ENERGY_REGEN_MS,
   loadEnergy,
   saveEnergy,
   computeRegenerated,
@@ -16,9 +15,20 @@ import {
   saveCoins,
   loadLabLevel,
   saveLabLevel,
-  getUpgrade,
-  canAffordUpgrade,
-  purchaseUpgrade,
+  type LabState,
+  type EquipmentId,
+  loadLabState,
+  getLabBonusSummary,
+  saveLabState,
+  startResearch,
+  accelerateResearch,
+  isResearchComplete,
+  completeResearch,
+  rushResearch,
+  getLabBonuses,
+  getTotalLabLevel,
+  getResearchProgress,
+  getResearchTimeRemaining,
   loadStats,
   saveStats,
   loadMilestones,
@@ -41,6 +51,16 @@ import {
   getSecondWindCooldownRemaining,
   loadStarRank,
   saveStarRank,
+  loadStarPathLevel,
+  saveStarPathLevel,
+  getStarPathLevel,
+  getStarPathBonuses,
+  getStarPathBonusSummary,
+  canAffordStarPath,
+  purchaseStarPath,
+  getEffectiveMaxEnergy,
+  getEffectiveRegenMs,
+  getPrestigeMultiplier,
 } from "@/lib/games/memory-quest-economy";
 import {
   type QuestCard,
@@ -94,6 +114,8 @@ import {
 } from "@/lib/games/memory-quest-shop";
 import BottomTabBar from "@/components/BottomTabBar";
 import FloatingMiniGameButtons from "@/components/FloatingMiniGameButtons";
+import FloatingUpgradeButtons from "@/components/FloatingUpgradeButtons";
+import ResearchLab from "@/components/ResearchLab";
 import MiniGameOverlay from "@/components/MiniGameOverlay";
 import CoinFlipGame from "@/components/CoinFlipGame";
 import TreasureChestGame from "@/components/TreasureChestGame";
@@ -129,13 +151,24 @@ export default function MemoryQuestPage() {
   const [energy, setEnergy] = useState<EnergyState>(() => ({ amount: MAX_ENERGY, lastUpdated: Date.now() }));
   const [coins, setCoins] = useState(0);
   const [labLevel, setLabLevel] = useState(0);
+  const [labState, setLabState] = useState<LabState>(() => ({ levels: { scanner: 0, amplifier: 0, reactor: 0, processor: 0, matrix: 0, beacon: 0 }, research: { activeResearch: null, startedAt: 0, baseDurationMs: 0, playAcceleration: 0 } }));
+  const [showResearchLab, setShowResearchLab] = useState(false);
   const [stats, setStats] = useState<PlayerStats>({
     totalMatches: 0, totalBoardsCleared: 0, highestCombo: 0, totalCoinsEarned: 0, highestRound: 0, totalPrestiges: 0,
   });
   const [achievedMilestones, setAchievedMilestones] = useState<string[]>([]);
   const [highScore, setHighScore] = useState(0);
   const [starRank, setStarRank] = useState(0);
+  const [starPathLevel, setStarPathLevel] = useState(0);
   const [timeToNextEnergy, setTimeToNextEnergy] = useState(0);
+
+  // Derived Star Path values
+  const starPathBonuses = useMemo(() => getStarPathBonuses(starPathLevel), [starPathLevel]);
+  const labBonuses = useMemo(() => getLabBonuses(labState), [labState]);
+  const effectiveMaxEnergy = useMemo(() => getEffectiveMaxEnergy(starPathBonuses, labBonuses), [starPathBonuses, labBonuses]);
+  const effectiveRegenMs = useMemo(() => getEffectiveRegenMs(starPathBonuses, labBonuses), [starPathBonuses, labBonuses]);
+  const starPathBonusSummaryMemo = useMemo(() => getStarPathBonusSummary(starPathLevel), [starPathLevel]);
+  const labBonusSummaryMemo = useMemo(() => getLabBonusSummary(labState), [labState]);
 
   // Game state
   const [round, setRound] = useState(1);
@@ -151,6 +184,7 @@ export default function MemoryQuestPage() {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [showLab, setShowLab] = useState(false);
+  const [showStarPath, setShowStarPath] = useState(false);
   const [muted, setMuted] = useState(false);
   const [comboAnim, setComboAnim] = useState(false);
   const [coinFloats, setCoinFloats] = useState<CoinFloat[]>([]);
@@ -223,10 +257,12 @@ export default function MemoryQuestPage() {
     setEnergy(loadEnergy());
     setCoins(loadCoins());
     setLabLevel(loadLabLevel());
+    setLabState(loadLabState());
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
     setStarRank(loadStarRank());
+    setStarPathLevel(loadStarPathLevel());
     setMuted(isMuted());
     setEventClears(loadEventClears());
 
@@ -245,19 +281,25 @@ export default function MemoryQuestPage() {
 
   const energyRef = useRef(energy);
   energyRef.current = energy;
+  const effectiveMaxEnergyRef = useRef(effectiveMaxEnergy);
+  effectiveMaxEnergyRef.current = effectiveMaxEnergy;
+  const effectiveRegenMsRef = useRef(effectiveRegenMs);
+  effectiveRegenMsRef.current = effectiveRegenMs;
   const timedEventRef = useRef(timedEvent);
   timedEventRef.current = timedEvent;
 
   useEffect(() => {
     const tick = () => {
       const prev = energyRef.current;
-      const updated = computeRegenerated(prev);
+      const regenMs = effectiveRegenMsRef.current;
+      const maxE = effectiveMaxEnergyRef.current;
+      const updated = computeRegenerated(prev, regenMs, maxE);
       if (updated.amount !== prev.amount) {
         saveEnergy(updated);
         setEnergy(updated);
       }
-      const nextEnergySec = updated.amount < MAX_ENERGY
-        ? Math.max(0, Math.ceil((updated.lastUpdated + ENERGY_REGEN_MS - Date.now()) / 1000))
+      const nextEnergySec = updated.amount < maxE
+        ? Math.max(0, Math.ceil((updated.lastUpdated + regenMs - Date.now()) / 1000))
         : 0;
       setTimeToNextEnergy((prev) => (prev === nextEnergySec ? prev : nextEnergySec));
 
@@ -330,8 +372,7 @@ export default function MemoryQuestPage() {
 
   const config = getBoardConfig(round);
   const matchSize = getMatchSize(round);
-  const currentUpgrade = getUpgrade(labLevel);
-  const nextUpgrade = getUpgrade(labLevel + 1);
+  void labLevel; // legacy, kept for old save loading
 
   // Derived state (no useState needed)
   const pendingScratchCard = timedEvent !== null && timedEvent.completed && !timedEvent.rewardClaimed;
@@ -465,7 +506,7 @@ export default function MemoryQuestPage() {
           const now = Date.now();
           setLastSecondWindTime(now);
           saveSecondWindTimestamp(now);
-          const revived = addEnergy(energy, MAX_ENERGY - energy.amount);
+          const revived = addEnergy(energy, effectiveMaxEnergy - energy.amount, effectiveMaxEnergy);
           setEnergy(revived);
           saveEnergy(revived);
           setShowSecondWind(true);
@@ -549,13 +590,21 @@ export default function MemoryQuestPage() {
       setFlippedIndices([]);
 
       // Rewards
-      const reward = calculateMatchReward(newCombo, round, starRank);
+      const reward = calculateMatchReward(newCombo, round, starRank, starPathBonuses, labBonuses);
       const newCoins = coins + reward.coins;
       setCoins(newCoins);
       saveCoins(newCoins);
       setSessionCoins((sc) => sc + reward.coins);
       setBoardCoins((bc) => bc + reward.coins);
       addCoinFloat(reward.coins, index);
+
+      // Accelerate research on match
+      const comboAccel = newCombo >= 3 ? 5_000 * newCombo : 0;
+      setLabState((prev) => {
+        const updated = accelerateResearch(prev, 15_000 + comboAccel);
+        saveLabState(updated);
+        return updated;
+      });
 
       // Energy refund
       const refundedEnergy = addEnergy(newEnergy, reward.energyRefund);
@@ -641,11 +690,18 @@ export default function MemoryQuestPage() {
 
       // Check board clear
       if (isAllMatched(newCards)) {
-        const clearReward = calculateBoardClearReward(round, starRank);
+        const clearReward = calculateBoardClearReward(round, starRank, starPathBonuses, labBonuses);
         const clearedCoins = newCoins + clearReward.coins;
         setCoins(clearedCoins);
         saveCoins(clearedCoins);
         setSessionCoins((sc) => sc + clearReward.coins);
+
+        // Accelerate research on board clear
+        setLabState((prev) => {
+          const updated = accelerateResearch(prev, 60_000);
+          saveLabState(updated);
+          return updated;
+        });
 
         // Board clear energy reward
         if (clearReward.energy > 0) {
@@ -752,7 +808,7 @@ export default function MemoryQuestPage() {
         }, 2500);
       }
     },
-    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank],
+    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank, starPathBonuses, effectiveMaxEnergy],
   );
 
   // ── Quit (show summary, then back to idle) ──────────
@@ -781,12 +837,14 @@ export default function MemoryQuestPage() {
     setEnergy(loadEnergy());
     setCoins(loadCoins());
     setLabLevel(loadLabLevel());
+    setLabState(loadLabState());
     setStats(loadStats());
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
     setStarRank(loadStarRank());
     setShowPrestigeConfirm(false);
     setShowLab(false);
+    setShowStarPath(false);
     setLocked(false);
     setBoardClearing(false);
     setBoardEntering(false);
@@ -830,17 +888,47 @@ export default function MemoryQuestPage() {
     playSound("levelUp");
   }, [starRank, achievedMilestones]);
 
-  // ── Lab Upgrade ──────────────────────────────────────
+  // ── Research Lab ────────────────────────────────────
 
-  const handleUpgrade = useCallback(() => {
-    const result = purchaseUpgrade(coins, labLevel);
+  const handleStartResearch = useCallback((id: EquipmentId) => {
+    const result = startResearch(labState, id, coins);
+    if (!result) return;
+    setLabState(result.newState);
+    saveLabState(result.newState);
+    setCoins(result.newCoins);
+    saveCoins(result.newCoins);
+    playSound("click");
+  }, [labState, coins]);
+
+  const handleRushResearch = useCallback(() => {
+    const result = rushResearch(labState, coins);
+    if (!result) return;
+    setLabState(result.newState);
+    saveLabState(result.newState);
+    setCoins(result.newCoins);
+    saveCoins(result.newCoins);
+    playSound("levelUp");
+  }, [labState, coins]);
+
+  const handleCompleteResearch = useCallback(() => {
+    if (!isResearchComplete(labState)) return;
+    const newState = completeResearch(labState);
+    setLabState(newState);
+    saveLabState(newState);
+    playSound("levelUp");
+  }, [labState]);
+
+  // ── Star Path Purchase ─────────────────────────────
+
+  const handleStarPathPurchase = useCallback(() => {
+    const result = purchaseStarPath(coins, starPathLevel);
     if (!result) return;
     setCoins(result.newCoins);
     saveCoins(result.newCoins);
-    setLabLevel(result.newLevel);
-    saveLabLevel(result.newLevel);
+    setStarPathLevel(result.newLevel);
+    saveStarPathLevel(result.newLevel);
     playSound("levelUp");
-  }, [coins, labLevel]);
+  }, [coins, starPathLevel]);
 
   // ── Wheel Spin ─────────────────────────────────────
 
@@ -989,6 +1077,7 @@ export default function MemoryQuestPage() {
   const handleOpenShop = useCallback(() => {
     playSound("click");
     setShowLab(false);
+    setShowStarPath(false);
     setPhase("shop");
   }, []);
 
@@ -1251,6 +1340,7 @@ export default function MemoryQuestPage() {
     switch (tab) {
       case "home":
         setShowLab(false);
+        setShowStarPath(false);
         setPhase("idle");
         break;
       case "play":
@@ -1328,8 +1418,8 @@ export default function MemoryQuestPage() {
 
   // ── Render Helpers ───────────────────────────────────
 
-  const energyPercent = Math.min(100, (energy.amount / MAX_ENERGY) * 100);
-  const energyOverflow = energy.amount > MAX_ENERGY;
+  const energyPercent = Math.min(100, (energy.amount / effectiveMaxEnergy) * 100);
+  const energyOverflow = energy.amount > effectiveMaxEnergy;
 
   const cardHeight = config.cols <= 4 ? "h-24 sm:h-32" : config.cols <= 5 ? "h-20 sm:h-28" : "h-18 sm:h-24";
   const cardFontSize = config.cols <= 4 ? "text-4xl sm:text-5xl" : config.cols <= 5 ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl";
@@ -1392,14 +1482,14 @@ export default function MemoryQuestPage() {
               />
             </div>
             <p className="mt-0.5 text-sm text-gray-300">
-              {energy.amount}/{MAX_ENERGY}
+              {energy.amount}/{effectiveMaxEnergy}
               {energyOverflow && (
                 <span className="ml-1 font-bold text-gold-bright text-glow-gold">OVERCHARGED</span>
               )}
               {!energyOverflow && energy.amount <= LOW_ENERGY_THRESHOLD && phase === "playing" && (
                 <span className="ml-1 font-semibold text-red-400">Low Energy!</span>
               )}
-              {!energyOverflow && energy.amount > LOW_ENERGY_THRESHOLD && energy.amount < MAX_ENERGY && timeToNextEnergy > 0 && (
+              {!energyOverflow && energy.amount > LOW_ENERGY_THRESHOLD && energy.amount < effectiveMaxEnergy && timeToNextEnergy > 0 && (
                 <span className="ml-1 text-gray-400">+1 in {timeToNextEnergy}s</span>
               )}
               {!energyOverflow && !isSecondWindAvailable(lastSecondWindTime) && phase === "playing" && (
@@ -1449,49 +1539,103 @@ export default function MemoryQuestPage() {
         />
       )}
 
+      {/* ── Active Boosts (during gameplay) ── */}
+      {phase === "playing" && (starPathLevel > 0 || starRank > 0 || labBonusSummaryMemo.length > 0) && (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {starRank > 0 && (
+            <span className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 text-xs font-semibold text-yellow-300">
+              ⭐ x{getPrestigeMultiplier(starRank).toFixed(1)} coins
+            </span>
+          )}
+          {starPathBonusSummaryMemo.map((b) => (
+            <span key={b.label} className="rounded-lg bg-white/5 border border-white/8 px-2 py-0.5 text-xs text-gray-300">
+              {b.emoji} {b.label}
+            </span>
+          ))}
+          {labBonusSummaryMemo.map((b) => (
+            <span key={b.label} className="rounded-lg bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
+              {b.emoji} {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* ── IDLE PHASE ──────────────────────────────── */}
       {phase === "idle" && (
         <div className="animate-bounce-in flex flex-col items-center gap-6 py-6">
-          {/* Lab Display */}
+          {/* Research Lab Display */}
           <div className="flex flex-col items-center gap-2">
-            <div className="hero-glow animate-upgrade-glow glow-bloom flex h-36 w-36 items-center justify-center rounded-3xl bg-purple-500/20 border-2 border-purple-500/30 text-6xl">
-              {currentUpgrade.emoji}
-            </div>
-            <p className="font-bold text-purple-300 text-glow-purple">{currentUpgrade.name}</p>
-            <p className="text-sm text-gray-400 text-number-bold">Lab Level {labLevel}</p>
+            <button
+              onClick={() => setShowResearchLab(true)}
+              className="hero-glow animate-upgrade-glow glow-bloom flex h-36 w-36 items-center justify-center rounded-3xl bg-purple-500/20 border-2 border-purple-500/30 text-6xl transition hover:scale-105"
+            >
+              🧪
+            </button>
+            <p className="font-bold text-purple-300 text-glow-purple">Research Lab</p>
+            <p className="text-sm text-gray-400 text-number-bold">Equipment Lv. {getTotalLabLevel(labState)}</p>
+            {labState.research.activeResearch && (
+              <p className="text-xs text-purple-400 animate-research-bubble">
+                🔬 Researching...
+              </p>
+            )}
           </div>
 
-          {/* Upgrade Button */}
+          {/* Open Research Lab */}
           <button
-            onClick={() => setShowLab((l) => !l)}
-            className="rounded-xl bg-purple-500/20 border-2 border-purple-500/30 px-4 py-2 text-base font-semibold text-purple-300 transition hover:bg-purple-500/30"
+            onClick={() => setShowResearchLab(true)}
+            className={`rounded-xl bg-purple-500/20 border-2 border-purple-500/30 px-4 py-2 text-base font-semibold text-purple-300 transition hover:bg-purple-500/30 ${
+              labState.research.activeResearch ? "animate-fab-pulse" : ""
+            }`}
           >
-            {showLab ? "Hide Lab" : "Upgrade Lab"}
+            🧪 Open Lab
           </button>
 
-          {showLab && (
-            <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg">
-              <p className="mb-2 text-center text-base font-semibold text-gray-300">Next Upgrade</p>
-              <div className="mb-3 flex items-center justify-center gap-3">
-                <span className="text-3xl">{nextUpgrade.emoji}</span>
-                <div>
-                  <p className="font-bold text-purple-300">{nextUpgrade.name}</p>
-                  <p className="text-sm text-yellow-300 text-glow-gold">🪙 {nextUpgrade.cost.toLocaleString()}</p>
+          {/* Star Path */}
+          <button
+            onClick={() => setShowStarPath((s) => !s)}
+            className="rounded-xl bg-yellow-500/20 border-2 border-yellow-500/30 px-4 py-2 text-base font-semibold text-yellow-300 transition hover:bg-yellow-500/30"
+          >
+            {showStarPath ? "Hide Star Path" : `⭐ Star Path ${starPathLevel > 0 ? `(Lv. ${starPathLevel})` : ""}`}
+          </button>
+
+          {showStarPath && (() => {
+            const next = getStarPathLevel(starPathLevel + 1);
+            const summary = getStarPathBonusSummary(starPathLevel);
+            const affordable = canAffordStarPath(coins, starPathLevel);
+            return (
+              <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg">
+                <p className="mb-2 text-center text-base font-semibold text-gray-300">Next Star Path Level</p>
+                <div className="mb-3 flex items-center justify-center gap-3">
+                  <span className="text-3xl">{next.emoji}</span>
+                  <div>
+                    <p className="font-bold text-yellow-200">{next.name}</p>
+                    <p className="text-sm text-gray-400">{next.bonusLabel}</p>
+                    <p className="text-sm text-yellow-300 text-glow-gold">🪙 {next.cost.toLocaleString()}</p>
+                  </div>
                 </div>
+                {summary.length > 0 && (
+                  <div className="mb-3 flex flex-wrap justify-center gap-2">
+                    {summary.map((b, i) => (
+                      <span key={i} className="rounded-lg bg-white/5 px-2 py-1 text-xs text-gray-300">
+                        {b.emoji} {b.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={handleStarPathPurchase}
+                  disabled={!affordable}
+                  className={`w-full rounded-xl py-2.5 font-bold text-white transition ${
+                    affordable
+                      ? "gradient-btn-gold animate-shimmer"
+                      : "cursor-not-allowed bg-gray-700 text-gray-400"
+                  }`}
+                >
+                  {affordable ? "Purchase" : "Not enough coins"}
+                </button>
               </div>
-              <button
-                onClick={handleUpgrade}
-                disabled={!canAffordUpgrade(coins, labLevel)}
-                className={`w-full rounded-xl py-2.5 font-bold text-white transition ${
-                  canAffordUpgrade(coins, labLevel)
-                    ? "gradient-btn animate-shimmer"
-                    : "cursor-not-allowed bg-gray-700 text-gray-400"
-                }`}
-              >
-                {canAffordUpgrade(coins, labLevel) ? "Purchase" : "Not enough coins"}
-              </button>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Shop Button */}
           <button
@@ -2111,6 +2255,31 @@ export default function MemoryQuestPage() {
         <FloatingMiniGameButtons
           coins={coins}
           onOpenMiniGame={handleOverlayBuyGame}
+        />
+      )}
+
+      {/* ── Research Lab Overlay ─────────────────────── */}
+      {showResearchLab && (
+        <ResearchLab
+          labState={labState}
+          coins={coins}
+          onStartResearch={handleStartResearch}
+          onRushResearch={handleRushResearch}
+          onCompleteResearch={handleCompleteResearch}
+          onClose={() => setShowResearchLab(false)}
+        />
+      )}
+
+      {/* ── Floating Upgrade Buttons (during gameplay) ── */}
+      {phase === "playing" && !miniGameOverlay && (
+        <FloatingUpgradeButtons
+          labState={labState}
+          starPathLevel={starPathLevel}
+          nextStarPath={getStarPathLevel(starPathLevel + 1)}
+          starPathBonusSummary={getStarPathBonusSummary(starPathLevel)}
+          canAffordStarPath={canAffordStarPath(coins, starPathLevel)}
+          onOpenLab={() => setShowResearchLab(true)}
+          onPurchaseStarPath={handleStarPathPurchase}
         />
       )}
 

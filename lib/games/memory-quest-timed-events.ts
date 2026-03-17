@@ -92,11 +92,11 @@ const SYMBOL_EMOJIS: Record<ScratchSymbol, string> = {
 
 // Prize ranges: [min, max] per tier
 const PRIZE_TABLE: Record<ScratchSymbol, Record<EventTier, { coins: [number, number]; energy: [number, number] }>> = {
-  coins:     { bronze: { coins: [20, 50],   energy: [0, 0] },  silver: { coins: [50, 125],  energy: [0, 0] },  gold: { coins: [100, 250], energy: [0, 0] } },
-  energy:    { bronze: { coins: [0, 0],     energy: [2, 5] },  silver: { coins: [0, 0],     energy: [5, 10] }, gold: { coins: [0, 0],     energy: [10, 20] } },
-  bigCoins:  { bronze: { coins: [50, 100],  energy: [0, 0] },  silver: { coins: [125, 250], energy: [0, 0] },  gold: { coins: [250, 500], energy: [0, 0] } },
-  bigEnergy: { bronze: { coins: [0, 0],     energy: [5, 8] },  silver: { coins: [0, 0],     energy: [10, 15] },gold: { coins: [0, 0],     energy: [20, 30] } },
-  skull:     { bronze: { coins: [0, 0],     energy: [0, 0] },  silver: { coins: [0, 0],     energy: [0, 0] },  gold: { coins: [0, 0],     energy: [0, 0] } },
+  coins:     { bronze: { coins: [40, 100],  energy: [0, 0] },  silver: { coins: [100, 250],  energy: [0, 0] },  gold: { coins: [200, 500],  energy: [0, 0] } },
+  energy:    { bronze: { coins: [0, 0],     energy: [4, 10] }, silver: { coins: [0, 0],      energy: [10, 20] },gold: { coins: [0, 0],      energy: [20, 40] } },
+  bigCoins:  { bronze: { coins: [100, 200], energy: [0, 0] },  silver: { coins: [250, 500],  energy: [0, 0] },  gold: { coins: [500, 1000], energy: [0, 0] } },
+  bigEnergy: { bronze: { coins: [0, 0],     energy: [10, 16] },silver: { coins: [0, 0],      energy: [20, 30] },gold: { coins: [0, 0],      energy: [40, 60] } },
+  skull:     { bronze: { coins: [0, 0],     energy: [0, 0] },  silver: { coins: [0, 0],      energy: [0, 0] },  gold: { coins: [0, 0],      energy: [0, 0] } },
 };
 
 // Skull chance per tier (probability that skulls are the winning triplet)
