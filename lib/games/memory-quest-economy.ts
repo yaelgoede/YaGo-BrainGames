@@ -134,6 +134,11 @@ export function addEnergy(state: EnergyState, amount: number, maxEnergy: number 
   };
 }
 
+/** Add energy without capping — used for rewards that should exceed max. */
+export function addEnergyUncapped(state: EnergyState, amount: number): EnergyState {
+  return { amount: state.amount + amount, lastUpdated: state.lastUpdated };
+}
+
 // ── Coins ──────────────────────────────────────────────
 
 export function loadCoins(): number {

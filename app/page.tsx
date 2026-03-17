@@ -59,6 +59,7 @@ import {
   getEffectiveMaxEnergy,
   getEffectiveRegenMs,
   getPrestigeMultiplier,
+  addEnergyUncapped,
 } from "@/lib/games/memory-quest-economy";
 import {
   type QuestCard,
@@ -423,7 +424,7 @@ export default function MemoryQuestPage() {
   }, []);
 
   const earnEnergy = useCallback((amount: number) => {
-    setEnergy((prev) => { const e = addEnergy(prev, amount); saveEnergy(e); return e; });
+    setEnergy((prev) => { const e = addEnergyUncapped(prev, amount); saveEnergy(e); return e; });
   }, []);
 
   /** Attempt to purchase a shop mini-game. Returns false if purchase fails. */
@@ -622,7 +623,7 @@ export default function MemoryQuestPage() {
       });
 
       // Energy refund
-      const refundedEnergy = addEnergy(newEnergy, reward.energyRefund);
+      const refundedEnergy = addEnergyUncapped(newEnergy, reward.energyRefund);
       setEnergy(refundedEnergy);
       saveEnergy(refundedEnergy);
       if (reward.energyRefund > 0) {
@@ -740,7 +741,7 @@ export default function MemoryQuestPage() {
                 setSafetyNetGift(gift);
                 setBoardsSinceLastSafetyNet(0);
                 setTimeout(() => setSafetyNetGift(null), 2500);
-                const e = addEnergy(currentEnergy, gift);
+                const e = addEnergyUncapped(currentEnergy, gift);
                 saveEnergy(e);
                 return e;
               }
