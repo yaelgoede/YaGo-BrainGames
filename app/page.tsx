@@ -947,7 +947,10 @@ export default function MemoryQuestPage() {
     const segmentCenter = winIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
     // Wheel spins clockwise, so to land pointer on segment, rotate -(segmentCenter) + full spins
     const fullSpins = 5 + Math.floor(Math.random() * 3); // 5-7 full rotations
-    const targetRotation = wheelRotation + fullSpins * 360 + (360 - segmentCenter);
+    const currentAngle = wheelRotation % 360;
+    const targetAngle = 360 - segmentCenter;
+    const extraRotation = ((targetAngle - currentAngle) % 360 + 360) % 360;
+    const targetRotation = wheelRotation + fullSpins * 360 + extraRotation;
     setWheelRotation(targetRotation);
 
     // Play tick sounds during spin
