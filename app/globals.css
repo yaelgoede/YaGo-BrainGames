@@ -197,27 +197,12 @@ body::before {
   50% { filter: brightness(1.4); }
 }
 
-@keyframes research-complete {
-  0% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
-  50% { transform: scale(1.15); box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(212, 175, 55, 0.3); }
-  100% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
-}
-
-@keyframes equipment-unlock {
-  0% { transform: scale(0.8) rotate(-5deg); opacity: 0.5; }
-  50% { transform: scale(1.2) rotate(3deg); }
-  70% { transform: scale(0.95); }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
 @keyframes research-bubble {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
 }
 
 .animate-research-progress { animation: research-progress 2s ease-in-out infinite; }
-.animate-research-complete { animation: research-complete 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.animate-equipment-unlock  { animation: equipment-unlock 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .animate-research-bubble   { animation: research-bubble 1.5s ease-in-out infinite; }
 
 @keyframes bounce-in {
@@ -230,16 +215,6 @@ body::before {
 @keyframes shimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
-}
-
-@keyframes float-up {
-  0% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-40px); }
-}
-
-@keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5); }
-  100% { box-shadow: 0 0 0 12px rgba(124, 58, 237, 0); }
 }
 
 @keyframes gradient-shift {
@@ -279,11 +254,6 @@ body::before {
   100% { opacity: 0; transform: scale(0.3) rotateY(180deg) translateY(-20px); }
 }
 
-@keyframes phase-exit-up {
-  0% { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-30px) scale(0.95); }
-}
-
 @keyframes phase-enter-up {
   0% { opacity: 0; transform: translateY(30px) scale(0.95); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -317,11 +287,6 @@ body::before {
   100% { transform: scale(1) rotate(0deg); }
 }
 
-@keyframes milestone-shine {
-  0% { left: -100%; }
-  100% { left: 200%; }
-}
-
 @keyframes combo-fire {
   0%, 100% { text-shadow: 0 0 10px rgba(234, 179, 8, 0.4); }
   50% { text-shadow: 0 0 30px rgba(234, 179, 8, 0.8), 0 0 60px rgba(239, 68, 68, 0.4); }
@@ -352,21 +317,10 @@ body::before {
   100% { transform: translateY(0); }
 }
 
-@keyframes chest-lid-open {
-  0% { transform: translateY(0) rotateX(0); transform-origin: top center; }
-  60% { transform: translateY(-8px) rotateX(-30deg); transform-origin: top center; }
-  100% { transform: translateY(-6px) rotateX(-25deg); transform-origin: top center; }
-}
-
 @keyframes chest-sparkle-burst {
   0% { opacity: 1; transform: scale(0.5); }
   50% { opacity: 1; transform: scale(1.5); }
   100% { opacity: 0; transform: scale(2.5); }
-}
-
-@keyframes scratch-wipe {
-  0% { clip-path: circle(0% at var(--tap-x, 50%) var(--tap-y, 50%)); }
-  100% { clip-path: circle(100% at var(--tap-x, 50%) var(--tap-y, 50%)); }
 }
 
 @keyframes tab-underline-slide {
@@ -427,14 +381,6 @@ body::before {
   background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%);
   background-size: 200% 100%;
   animation: shimmer 2s ease-in-out infinite;
-}
-
-.animate-float-up {
-  animation: float-up 700ms ease-out forwards;
-}
-
-.animate-pulse-ring {
-  animation: pulse-ring 1s ease-out infinite;
 }
 
 .animate-gradient {
@@ -508,18 +454,6 @@ body::before {
   animation: streak-pop 500ms ease-out;
 }
 
-.animate-card-cascade {
-  animation: card-cascade-in 500ms ease-out backwards;
-}
-
-.animate-card-fold-out {
-  animation: card-fold-out 500ms ease-in forwards;
-}
-
-.animate-phase-exit {
-  animation: phase-exit-up 250ms ease-in forwards;
-}
-
 .animate-phase-enter {
   animation: phase-enter-up 300ms ease-out;
 }
@@ -530,21 +464,6 @@ body::before {
 
 .animate-counter-bump {
   animation: counter-bump 300ms ease-out;
-}
-
-.animate-milestone-stamp {
-  animation: milestone-stamp 600ms ease-out forwards;
-}
-
-.animate-milestone-stamp::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  animation: milestone-shine 600ms ease-out 400ms forwards;
 }
 
 .animate-combo-fire {
@@ -564,20 +483,8 @@ body::before {
   animation: reel-land 300ms ease-out;
 }
 
-.animate-chest-lid {
-  animation: chest-lid-open 500ms ease-out forwards;
-}
-
 .animate-chest-sparkle {
   animation: chest-sparkle-burst 600ms ease-out forwards;
-}
-
-.animate-scratch-wipe {
-  animation: scratch-wipe 300ms ease-out forwards;
-}
-
-.animate-tab-underline {
-  animation: tab-underline-slide 200ms ease-out;
 }
 
 .animate-focus-ring {
@@ -585,11 +492,6 @@ body::before {
 }
 
 /* ── Lucky Wheel ─────────────────────────────────── */
-
-@keyframes wheel-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
 
 @keyframes prize-pop {
   0% { opacity: 0; transform: scale(0.3); }
@@ -606,10 +508,6 @@ body::before {
 @keyframes pointer-bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
-}
-
-.animate-wheel-spin {
-  animation: wheel-spin 0.5s linear infinite;
 }
 
 .animate-prize-pop {
@@ -923,20 +821,6 @@ body::before {
 .confetti-container span:nth-child(15) { left: 58%; width: 9px;  height: 9px;  background: #FFD700; animation-delay: 0.32s; animation-duration: 3.0s; border-radius: 50%; }
 .confetti-container span:nth-child(16) { left: 75%; width: 7px;  height: 7px;  background: #a3e635; animation-delay: 0.45s; animation-duration: 3.2s; }
 
-/* ── Screen Shake ────────────────────────────────── */
-
-@keyframes screen-shake {
-  0%, 100% { transform: translateX(0); }
-  10% { transform: translateX(-5px) translateY(2px); }
-  20% { transform: translateX(5px) translateY(-2px); }
-  30% { transform: translateX(-3px); }
-  40% { transform: translateX(3px); }
-}
-
-.animate-screen-shake {
-  animation: screen-shake 0.4s ease-out;
-}
-
 /* ── Elastic Bounce ──────────────────────────────── */
 
 @keyframes elastic-bounce {
@@ -971,16 +855,6 @@ body::before {
 
 /* ── Shop Animations ──────────────────────────────────── */
 
-@keyframes coin-spin {
-  0% { transform: rotateY(0deg) scale(1); }
-  50% { transform: rotateY(900deg) scale(1.1); }
-  100% { transform: rotateY(1800deg) scale(1); }
-}
-.animate-coin-spin {
-  animation: coin-spin 1.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
-  transform-style: preserve-3d;
-}
-
 @keyframes chest-wiggle {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   25% { transform: translateY(-3px) rotate(-2deg); }
@@ -1006,16 +880,6 @@ body::before {
 }
 .animate-chest-fade {
   animation: chest-fade 400ms ease-out forwards;
-}
-
-@keyframes reel-blur {
-  0% { filter: blur(0); }
-  20% { filter: blur(2px); }
-  80% { filter: blur(2px); }
-  100% { filter: blur(0); }
-}
-.animate-reel-blur {
-  animation: reel-blur 0.6s ease-out;
 }
 
 @keyframes slot-jackpot {

@@ -105,15 +105,6 @@ export function createQuestBoard(round: number): QuestCard[] {
   return shuffled.map((card, i) => ({ ...card, id: i }));
 }
 
-export function isGroupComplete(
-  cards: QuestCard[],
-  groupId: number,
-  matchSize: number,
-): boolean {
-  const groupCards = cards.filter((c) => c.groupId === groupId);
-  return groupCards.filter((c) => c.flipped && !c.matched).length === matchSize;
-}
-
 export function isAllMatched(cards: QuestCard[]): boolean {
   return cards.every((c) => c.matched);
 }

@@ -82,20 +82,6 @@ export function getUpgrade(level: number): LabUpgrade {
   };
 }
 
-export function canAffordUpgrade(coins: number, currentLevel: number): boolean {
-  const next = getUpgrade(currentLevel + 1);
-  return coins >= next.cost;
-}
-
-export function purchaseUpgrade(
-  coins: number,
-  currentLevel: number,
-): { newCoins: number; newLevel: number } | null {
-  const next = getUpgrade(currentLevel + 1);
-  if (coins < next.cost) return null;
-  return { newCoins: coins - next.cost, newLevel: currentLevel + 1 };
-}
-
 // ── Energy ─────────────────────────────────────────────
 
 
@@ -147,16 +133,6 @@ export function loadCoins(): number {
 
 export function saveCoins(coins: number): void {
   store("mq-coins", coins);
-}
-
-// ── Lab Level ──────────────────────────────────────────
-
-export function loadLabLevel(): number {
-  return safe<number>("mq-lab-level", 0);
-}
-
-export function saveLabLevel(level: number): void {
-  store("mq-lab-level", level);
 }
 
 // ── Stats ──────────────────────────────────────────────
@@ -273,18 +249,6 @@ export function getMilestonesByCategory(): Record<keyof PlayerStats, Milestone[]
     categories[k].sort((a, b) => a.threshold - b.threshold);
   }
   return categories;
-}
-
-export function getNextMilestone(
-  stat: keyof PlayerStats,
-  stats: PlayerStats,
-  achieved: string[],
-): Milestone | null {
-  const set = new Set(achieved);
-  const candidates = MILESTONES
-    .filter((m) => m.stat === stat && !set.has(m.id))
-    .sort((a, b) => a.threshold - b.threshold);
-  return candidates[0] ?? null;
 }
 
 export function getMilestoneProgress(
