@@ -90,18 +90,23 @@ export function computeRegenerated(state: EnergyState, regenMs: number = ENERGY_
   const elapsed = Date.now() - state.lastUpdated;
   const regen = Math.floor(elapsed / regenMs);
   if (regen <= 0) return state;
+  const newLastUpdated = state.lastUpdated + regen * regenMs;
+  // If already at/above max (from uncapped rewards), just advance the timestamp — never clamp down
+  if (state.amount >= maxEnergy) {
+    return { amount: state.amount, lastUpdated: newLastUpdated };
+  }
   return {
     amount: Math.min(maxEnergy, state.amount + regen),
-    lastUpdated: state.lastUpdated + regen * regenMs,
+    lastUpdated: newLastUpdated,
   };
 }
 
-export function loadEnergy(): EnergyState {
+export function loadEnergy(maxEnergy: number = MAX_ENERGY): EnergyState {
   const saved = safe<EnergyState>("mq-energy", {
-    amount: MAX_ENERGY,
+    amount: maxEnergy,
     lastUpdated: Date.now(),
   });
-  return computeRegenerated(saved);
+  return computeRegenerated(saved, ENERGY_REGEN_MS, maxEnergy);
 }
 
 export function saveEnergy(state: EnergyState): void {

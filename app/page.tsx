@@ -838,7 +838,7 @@ export default function MemoryQuestPage() {
 
   const backToMenu = useCallback(() => {
     setPhase("idle");
-    setEnergy(loadEnergy());
+    setEnergy(loadEnergy(effectiveMaxEnergy));
     setCoins(loadCoins());
     setLabState(loadLabState());
     setStats(loadStats());
@@ -864,7 +864,7 @@ export default function MemoryQuestPage() {
     } else {
       setTimedEvent(null);
     }
-  }, []);
+  }, [effectiveMaxEnergy]);
 
   // ── Prestige (Star Rank) ──────────────────────────────
 
