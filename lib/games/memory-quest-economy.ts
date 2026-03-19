@@ -570,15 +570,15 @@ export function getEquipmentInfo(id: EquipmentId, level: number): { name: string
 }
 
 export function getResearchCost(targetLevel: number): number {
-  return Math.floor(150 * Math.pow(1.6, targetLevel - 1));
+  return Math.floor(300 * Math.pow(1.8, targetLevel - 1));
 }
 
 export function getResearchDuration(targetLevel: number): number {
-  return Math.floor(5 * 60_000 * Math.pow(1.4, targetLevel - 1));
+  return Math.floor(8 * 60_000 * Math.pow(1.4, targetLevel - 1));
 }
 
 export function getRushCost(remainingMs: number): number {
-  return Math.max(10, Math.floor(remainingMs / 6000));
+  return Math.max(25, Math.floor(remainingMs / 3000));
 }
 
 export function createDefaultLabState(): LabState {
