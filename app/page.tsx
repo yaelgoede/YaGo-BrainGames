@@ -110,6 +110,32 @@ import {
   generateSlotResult,
   recordShopPurchase,
 } from "@/lib/games/memory-quest-shop";
+import {
+  type MatchTimestamp,
+  type PlayerXP,
+  type DailyChallengeProgress,
+  getStreakMultiplier,
+  recordMatchTime,
+  isTimeComboTriggered,
+  COMBO_FLAT_BONUS_COINS,
+  getDailyChallenges,
+  loadDailyChallengeProgress,
+  saveDailyChallengeProgress,
+  updateChallengeProgress,
+  completeChallengeIfDone,
+  decodeLevelTimeParam,
+  loadPlayerXP,
+  savePlayerXP,
+  addXP,
+  getXPProgress,
+  getXPThreshold,
+  getLevelTitle,
+  MAX_PLAYER_LEVEL,
+  XP_BOARD_CLEAR,
+  XP_CHALLENGE_COMPLETE,
+  XP_COMBO_BONUS,
+  XP_MATCH,
+} from "@/lib/games/memory-quest-progression";
 import BottomTabBar from "@/components/BottomTabBar";
 import FloatingMiniGameButtons from "@/components/FloatingMiniGameButtons";
 import FloatingUpgradeButtons from "@/components/FloatingUpgradeButtons";
@@ -236,6 +262,21 @@ export default function MemoryQuestPage() {
   const [energyFlyup, setEnergyFlyup] = useState<number | null>(null);
   const [streakToast, setStreakToast] = useState<number | null>(null);
 
+  // Phase 4: Streak, combo, daily challenges, XP
+  const [consecutiveMatches, setConsecutiveMatches] = useState(0);
+  const [matchTimeHistory, setMatchTimeHistory] = useState<MatchTimestamp[]>([]);
+  const [timeComboAnim, setTimeComboAnim] = useState(false);
+  const [playerXP, setPlayerXP] = useState<PlayerXP>({ xp: 0, level: 1 });
+  const [levelUpAnim, setLevelUpAnim] = useState<number | null>(null);
+  const [dailyChallengeProgress, setDailyChallengeProgress] = useState<DailyChallengeProgress>({ date: "", completed: [], progress: {} });
+  const [showDailyChallenges, setShowDailyChallenges] = useState(false);
+  const [challengeToast, setChallengeToast] = useState<string | null>(null);
+  const [boardStartTime, setBoardStartTime] = useState(0);
+  const [sessionPerfectMatches, setSessionPerfectMatches] = useState(0);
+
+  const dailyChallenges = useMemo(() => getDailyChallenges(), []);
+  const streakMultiplier = useMemo(() => getStreakMultiplier(consecutiveMatches), [consecutiveMatches]);
+
   // Mini-game overlay (plays ON TOP of game board without changing phase)
   const [miniGameOverlay, setMiniGameOverlay] = useState<ShopGameType | null>(null);
 
@@ -262,6 +303,8 @@ export default function MemoryQuestPage() {
     setStarPathLevel(loadStarPathLevel());
     setMuted(isMuted());
     setEventClears(loadEventClears());
+    setPlayerXP(loadPlayerXP());
+    setDailyChallengeProgress(loadDailyChallengeProgress());
 
     // Load timed event, check if expired
     const saved = loadTimedEvent();
@@ -472,6 +515,9 @@ export default function MemoryQuestPage() {
     setCards(newCards);
     setFlippedIndices([]);
     setCombo(0);
+    setConsecutiveMatches(0);
+    setMatchTimeHistory([]);
+    setSessionPerfectMatches(0);
     setSessionScore(0);
     setSessionCoins(0);
     setBoardCoins(0);
@@ -483,6 +529,7 @@ export default function MemoryQuestPage() {
     setBoardsSinceLastSafetyNet(0);
     setSafetyNetGift(null);
     setLastSecondWindTime(loadSecondWindTimestamp());
+    setBoardStartTime(Date.now());
 
     setBoardEntering(true);
     setTimeout(() => setBoardEntering(false), 600);
@@ -555,6 +602,9 @@ export default function MemoryQuestPage() {
       if (!allSame) {
         // ── Mismatch ─────────────────────────────────
         setCombo(0);
+        setConsecutiveMatches(0);
+        setMatchTimeHistory([]);
+        setSessionPerfectMatches(0);
         playSound("wrong");
         setShakeIds(new Set(newFlipped));
         setLocked(true);
@@ -582,11 +632,25 @@ export default function MemoryQuestPage() {
       // ── Match Complete ───────────────────────────────
       const newCombo = combo + 1;
       setCombo(newCombo);
+      const newConsecutive = consecutiveMatches + 1;
+      setConsecutiveMatches(newConsecutive);
+      const currentStreakMultiplier = getStreakMultiplier(newConsecutive);
       playSound("correct");
+
+      // Track time-based combo
+      const newTimeHistory = recordMatchTime(matchTimeHistory);
+      setMatchTimeHistory(newTimeHistory);
+      const timeComboTriggered = isTimeComboTriggered(newTimeHistory);
 
       // Animate combo
       setComboAnim(true);
       setTimeout(() => setComboAnim(false), 300);
+
+      // Time combo animation
+      if (timeComboTriggered) {
+        setTimeComboAnim(true);
+        setTimeout(() => setTimeComboAnim(false), 800);
+      }
 
       // Mark matched
       for (const fi of newFlipped) {
@@ -605,14 +669,83 @@ export default function MemoryQuestPage() {
       }), 500);
       setFlippedIndices([]);
 
-      // Rewards
-      const reward = calculateMatchReward(newCombo, round, starRank, starPathBonuses, labBonuses);
-      const newCoins = coins + reward.coins;
+      // Rewards — streak multiplier applied to coin rewards
+      const reward = calculateMatchReward(newCombo, round, starRank, starPathBonuses, labBonuses, currentStreakMultiplier);
+      let matchCoins = reward.coins;
+      // Time-based combo flat bonus
+      if (timeComboTriggered) {
+        matchCoins += COMBO_FLAT_BONUS_COINS;
+      }
+      const newCoins = coins + matchCoins;
       setCoins(newCoins);
       saveCoins(newCoins);
-      setSessionCoins((sc) => sc + reward.coins);
-      setBoardCoins((bc) => bc + reward.coins);
-      addCoinFloat(reward.coins, index);
+      setSessionCoins((sc) => sc + matchCoins);
+      setBoardCoins((bc) => bc + matchCoins);
+      addCoinFloat(matchCoins, index);
+
+      // XP for match + time combo
+      let matchXP = XP_MATCH;
+      if (timeComboTriggered) matchXP += XP_COMBO_BONUS;
+      setPlayerXP((prev) => {
+        const { newState, levelsGained } = addXP(prev, matchXP);
+        savePlayerXP(newState);
+        if (levelsGained > 0) {
+          setLevelUpAnim(newState.level);
+          playSound("levelUp");
+          setTimeout(() => setLevelUpAnim(null), 2500);
+        }
+        return newState;
+      });
+
+      // Daily challenge: perfect matches tracking
+      const newPerfectCount = sessionPerfectMatches + 1;
+      setSessionPerfectMatches(newPerfectCount);
+      setDailyChallengeProgress((prev) => {
+        let updated = prev;
+        for (const ch of dailyChallenges) {
+          if (ch.type === "perfect_matches") {
+            updated = updateChallengeProgress(updated, ch.id, newPerfectCount);
+            const { progress: p2, justCompleted } = completeChallengeIfDone(updated, ch);
+            if (justCompleted) {
+              updated = p2;
+              const withReward = newCoins + ch.reward;
+              setCoins(withReward);
+              saveCoins(withReward);
+              setChallengeToast(ch.description);
+              setTimeout(() => setChallengeToast(null), 3000);
+              // XP for challenge
+              setPlayerXP((xpPrev) => {
+                const { newState } = addXP(xpPrev, XP_CHALLENGE_COMPLETE);
+                savePlayerXP(newState);
+                return newState;
+              });
+            } else {
+              updated = p2;
+            }
+          }
+          if (ch.type === "earn_coins_session") {
+            updated = updateChallengeProgress(updated, ch.id, sessionCoins + matchCoins);
+            const { progress: p2, justCompleted } = completeChallengeIfDone(updated, ch);
+            if (justCompleted) {
+              updated = p2;
+              const withReward = newCoins + ch.reward;
+              setCoins(withReward);
+              saveCoins(withReward);
+              setChallengeToast(ch.description);
+              setTimeout(() => setChallengeToast(null), 3000);
+              setPlayerXP((xpPrev) => {
+                const { newState } = addXP(xpPrev, XP_CHALLENGE_COMPLETE);
+                savePlayerXP(newState);
+                return newState;
+              });
+            } else {
+              updated = p2;
+            }
+          }
+        }
+        saveDailyChallengeProgress(updated);
+        return updated;
+      });
 
       // Accelerate research on match
       const comboAccel = newCombo >= 3 ? 5_000 * newCombo : 0;
@@ -670,7 +803,7 @@ export default function MemoryQuestPage() {
           ...prev,
           totalMatches: prev.totalMatches + 1,
           highestCombo: Math.max(prev.highestCombo, newCombo),
-          totalCoinsEarned: prev.totalCoinsEarned + reward.coins,
+          totalCoinsEarned: prev.totalCoinsEarned + matchCoins,
         };
         saveStats(updated);
 
@@ -719,6 +852,54 @@ export default function MemoryQuestPage() {
         if (clearReward.energy > 0) {
           earnEnergy(clearReward.energy);
         }
+
+        // XP for board clear
+        setPlayerXP((prev) => {
+          const { newState, levelsGained } = addXP(prev, XP_BOARD_CLEAR);
+          savePlayerXP(newState);
+          if (levelsGained > 0) {
+            setLevelUpAnim(newState.level);
+            playSound("levelUp");
+            setTimeout(() => setLevelUpAnim(null), 2500);
+          }
+          return newState;
+        });
+
+        // Daily challenge: complete level under time
+        const boardElapsed = (Date.now() - boardStartTime) / 1000;
+        setDailyChallengeProgress((prev) => {
+          let updated = prev;
+          for (const ch of dailyChallenges) {
+            if (ch.type === "complete_level_under_time" && ch.param) {
+              const { level: reqLevel, timeSeconds } = decodeLevelTimeParam(ch.param);
+              if (round === reqLevel && boardElapsed < timeSeconds) {
+                updated = updateChallengeProgress(updated, ch.id, 1);
+                const { progress: p2, justCompleted } = completeChallengeIfDone(updated, ch);
+                if (justCompleted) {
+                  updated = p2;
+                  const withReward = clearedCoins + ch.reward;
+                  setCoins(withReward);
+                  saveCoins(withReward);
+                  setChallengeToast(ch.description);
+                  setTimeout(() => setChallengeToast(null), 3000);
+                  setPlayerXP((xpPrev) => {
+                    const { newState } = addXP(xpPrev, XP_CHALLENGE_COMPLETE);
+                    savePlayerXP(newState);
+                    return newState;
+                  });
+                } else {
+                  updated = p2;
+                }
+              }
+            }
+          }
+          saveDailyChallengeProgress(updated);
+          return updated;
+        });
+
+        // Reset consecutive matches for new board, but keep tracking
+        setConsecutiveMatches(0);
+        setBoardStartTime(Date.now());
 
         // Streak bonus
         const newSessionBoards = sessionBoardsCleared + 1;
@@ -812,7 +993,7 @@ export default function MemoryQuestPage() {
         }, 2500);
       }
     },
-    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank, starPathBonuses, effectiveMaxEnergy, earnEnergy, labBonuses, pendingScratchCard],
+    [locked, phase, cards, flippedIndices, energy, combo, coins, sessionScore, round, matchSize, achievedMilestones, addCoinFloat, showMilestoneToast, eventClears, timedEvent, collectibleIndices, addCollectibleFloat, advanceToNextRound, lastSecondWindTime, sessionBoardsCleared, boardsSinceLastSafetyNet, starRank, starPathBonuses, effectiveMaxEnergy, earnEnergy, labBonuses, pendingScratchCard, consecutiveMatches, matchTimeHistory, sessionPerfectMatches, sessionCoins, dailyChallenges, boardStartTime],
   );
 
   // ── Quit (show summary, then back to idle) ──────────
@@ -845,8 +1026,11 @@ export default function MemoryQuestPage() {
     setAchievedMilestones(loadMilestones());
     setHighScore(loadHighScore());
     setStarRank(loadStarRank());
+    setPlayerXP(loadPlayerXP());
+    setDailyChallengeProgress(loadDailyChallengeProgress());
     setShowPrestigeConfirm(false);
     setShowStarPath(false);
+    setShowDailyChallenges(false);
     setLocked(false);
     setBoardClearing(false);
     setBoardEntering(false);
@@ -1417,7 +1601,38 @@ export default function MemoryQuestPage() {
             {combo}x
           </div>
         )}
+
+        {/* Streak multiplier (during game) */}
+        {phase === "playing" && streakMultiplier > 1 && (
+          <div className={`flex items-center gap-1 rounded-xl bg-orange-500/20 border border-orange-500/30 px-3 py-1.5 font-bold text-orange-400 ${comboAnim ? "animate-combo-pop" : ""}`}>
+            🔥 {streakMultiplier}x
+          </div>
+        )}
+
+        {/* Player Level */}
+        <div className="flex items-center gap-1 rounded-xl bg-blue-500/20 border border-blue-500/30 px-3 py-1.5">
+          <span className="text-sm font-semibold text-blue-300">Lv.{playerXP.level}</span>
+        </div>
       </div>
+
+      {/* ── XP Progress Bar ────────────────────────── */}
+      {playerXP.level < MAX_PLAYER_LEVEL && (
+        <div className="mb-1 flex items-center gap-2 px-1">
+          <span className="text-xs text-blue-400">{getLevelTitle(playerXP.level)}</span>
+          <div className="flex-1 h-2 overflow-hidden rounded-full bg-blue-900/40">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-300"
+              style={{ width: `${Math.round(getXPProgress(playerXP) * 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-blue-400">{playerXP.xp}/{getXPThreshold(playerXP.level)}</span>
+        </div>
+      )}
+      {playerXP.level >= MAX_PLAYER_LEVEL && (
+        <div className="mb-1 px-1">
+          <span className="text-xs font-bold text-yellow-300">⭐ {getLevelTitle(playerXP.level)} — Max Level!</span>
+        </div>
+      )}
 
       {/* ── HUD Progress Indicators (during gameplay) ── */}
       {phase === "playing" && (
@@ -1577,6 +1792,47 @@ export default function MemoryQuestPage() {
             <p className="text-base text-gold-400 text-glow-gold">
               High Score: <span className="font-bold text-number-bold">{highScore}</span> matches in one run
             </p>
+          )}
+
+          {/* Daily Challenges */}
+          <button
+            onClick={() => setShowDailyChallenges((s) => !s)}
+            className="rounded-xl bg-cyan-500/20 border-2 border-cyan-500/30 px-4 py-2 text-base font-semibold text-cyan-300 transition hover:bg-cyan-500/30"
+          >
+            {showDailyChallenges ? "Hide Challenges" : `📋 Daily Challenges (${dailyChallengeProgress.completed.length}/3)`}
+          </button>
+
+          {showDailyChallenges && (
+            <div className="animate-bounce-in w-full max-w-md rounded-2xl panel-dark p-4 shadow-lg">
+              <p className="mb-3 text-center text-base font-semibold text-cyan-300">Today&apos;s Challenges</p>
+              <div className="flex flex-col gap-3">
+                {dailyChallenges.map((ch) => {
+                  const done = dailyChallengeProgress.completed.includes(ch.id);
+                  const progress = dailyChallengeProgress.progress[ch.id] ?? 0;
+                  const pct = Math.min(100, (progress / ch.target) * 100);
+                  return (
+                    <div key={ch.id} className={`rounded-xl p-3 ${done ? "bg-green-500/15 border border-green-500/30" : "bg-white/5 border border-white/10"}`}>
+                      <div className="flex items-center justify-between">
+                        <p className={`text-sm font-medium ${done ? "text-green-400 line-through" : "text-gray-200"}`}>
+                          {done ? "✅ " : ""}{ch.description}
+                        </p>
+                        <span className={`text-xs font-bold ${done ? "text-green-400" : "text-yellow-300"}`}>
+                          🪙 {ch.reward}
+                        </span>
+                      </div>
+                      {!done && (
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/30">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* Start Button */}
@@ -2020,6 +2276,8 @@ export default function MemoryQuestPage() {
             <StatCard label="Rounds" value={round} />
             <StatCard label="Coins Earned" value={sessionCoins} />
             <StatCard label="Best Combo" value={`${stats.highestCombo}x`} />
+            <StatCard label="Player Level" value={`Lv.${playerXP.level}`} />
+            <StatCard label="Title" value={getLevelTitle(playerXP.level)} />
           </div>
           {sessionScore > 0 && sessionScore >= highScore && (
             <p className="font-bold text-yellow-300 text-glow-gold">New High Score! 🏆</p>
@@ -2150,6 +2408,40 @@ export default function MemoryQuestPage() {
           <div className="animate-streak-bonus rounded-2xl border-2 border-yellow-400 bg-navy-800/95 backdrop-blur-md px-5 py-3 shadow-xl text-center">
             <p className="text-sm font-bold text-yellow-300">🔥 Streak Bonus!</p>
             <p className="text-lg font-black text-green-400">+{streakToast} ⚡</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Time Combo Toast ──────────────────────────── */}
+      {timeComboAnim && (
+        <div className="pointer-events-none fixed bottom-20 left-1/2 z-50 -translate-x-1/2">
+          <div className="animate-streak-bonus rounded-2xl border-2 border-cyan-400 bg-navy-800/95 backdrop-blur-md px-5 py-3 shadow-xl text-center">
+            <p className="text-sm font-bold text-cyan-300">⚡ Speed Combo!</p>
+            <p className="text-lg font-black text-yellow-400">+{COMBO_FLAT_BONUS_COINS} 🪙</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Level Up Overlay ──────────────────────────── */}
+      {levelUpAnim !== null && (
+        <div className="animate-second-wind pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-blue-500/20 backdrop-blur-sm">
+          <div className="text-center">
+            <p className="text-5xl font-black text-white drop-shadow-[0_0_20px_rgba(59,130,246,0.8)]">
+              ⬆️ LEVEL UP! ⬆️
+            </p>
+            <p className="mt-2 text-2xl font-bold text-blue-300 drop-shadow-lg">
+              Level {levelUpAnim} — {getLevelTitle(levelUpAnim)}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Challenge Complete Toast ──────────────────── */}
+      {challengeToast && (
+        <div className="pointer-events-none fixed bottom-32 left-1/2 z-50 -translate-x-1/2">
+          <div className="animate-milestone rounded-2xl border-2 border-cyan-400 bg-navy-800/95 backdrop-blur-md px-5 py-3 shadow-xl text-center">
+            <p className="text-sm font-bold text-cyan-300">📋 Challenge Complete!</p>
+            <p className="text-sm text-gray-300">{challengeToast}</p>
           </div>
         </div>
       )}

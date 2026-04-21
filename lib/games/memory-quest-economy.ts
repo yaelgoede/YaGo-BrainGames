@@ -287,7 +287,7 @@ export function getPrestigeMultiplier(starRank: number): number {
   return 1 + starRank * 0.10;
 }
 
-export function calculateMatchReward(combo: number, round: number = 1, starRank: number = 0, spBonuses?: StarPathBonuses, labBonuses?: LabBonuses): {
+export function calculateMatchReward(combo: number, round: number = 1, starRank: number = 0, spBonuses?: StarPathBonuses, labBonuses?: LabBonuses, streakMultiplier: number = 1): {
   coins: number;
   energyRefund: number;
 } {
@@ -299,7 +299,7 @@ export function calculateMatchReward(combo: number, round: number = 1, starRank:
   const comboMultiplier = combo > 1 ? (1 + (labBonuses?.comboMultiplier ?? 0)) : 1;
   const coinMultiplier = getPrestigeMultiplier(starRank) * (1 + (spBonuses?.coinBoostPercent ?? 0) + (labBonuses?.coinMultiplier ?? 0));
   return {
-    coins: Math.floor(baseCoins * coinMultiplier * comboMultiplier),
+    coins: Math.floor(baseCoins * coinMultiplier * comboMultiplier * streakMultiplier),
     energyRefund: baseRefund + lateGameBonus + MATCH_PAIR_ENERGY_BONUS,
   };
 }
